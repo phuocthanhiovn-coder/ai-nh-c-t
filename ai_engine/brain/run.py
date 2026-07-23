@@ -36,6 +36,17 @@ def process(img):
     d1 = diagnose(out, with_masks=False)     # kham lan 2 (sau model)
     record["diagnosis_mid"] = {k: v for k, v in d1.items() if not k.startswith("_")}
 
+    # NAO v2 (25/07 dem): LIEU DATA-RUT-RA. Khai thac lieu toi uu tren 905 cap
+    # (tools/mine_doses) roi hoc predictor tuyen tinh -> predictor CHI NGANG
+    # baseline (9 features khong du tin hieu doan lieu rieng tung anh; std cao).
+    # NHUNG data lo ra su that lon: lieu tay CU QUA NANG (sl 0.5 vs 0.16 toi uu,
+    # vb 0.75 vs 0.36) -> dung "sang qua nang / mau khong tu nhien" chu che nhieu
+    # vong. => dung LIEU TRUNG BINH TOI UU lam mac dinh (nhe hon nhieu). Predictor
+    # giu file nhung TAT (khong hon baseline). Per-image dose can feature giau hon
+    # / model phi tuyen — de sau.
+    learned = {"sl": 0.16, "wh": 0.30, "vb": 0.36, "dc": 0.34, "bk": 0.58}
+    record["learned_doses"] = learned
+
     if masks is not None:
         from ai_engine.brain.material_grade import _warm_gate
         from ai_engine.specialists.segment_room.seg import segment_fine
@@ -48,8 +59,11 @@ def process(img):
         furn = np.clip(mats_pre.get("wood", 0) + mats_pre.get("fabric", 0), 0, 1)
         lift_mask = np.clip(arch + 0.85 * furn, 0.0, 1.0)
         need = max(0.0, min(1.0, (d1["dark_frac"] - 0.02) / 0.20))
-        if need > 0.05:
-            amt = round(0.5 + 0.5 * need, 2)   # 25/07: nang cong thuc (san con toi nhe)
+        if learned:
+            amt = learned["sl"]
+        else:
+            amt = round(0.5 + 0.5 * need, 2) if need > 0.05 else 0.0
+        if amt > 0.05:
             out = region_apply(out, _sl.apply, {"amount": amt}, lift_mask)
             record["steps"].append({"op": "shadow_light@arch+furniture", "amount": amt,
                                     "reason": f"vung toi sau model {d1['dark_frac']:.0%}, thap kien truc + noi that (ne do dien)"})
@@ -61,8 +75,12 @@ def process(img):
                 out = region_apply(out, R["temperature"]["fn"], {"amount": -0.07}, cool_mask)
                 record["steps"].append({"op": "cool@dark", "reason": "khu vang vung toi vua thap"})
         # rua bun: chi kien truc (do vat/go giu mau)
-        dc = round(min(0.7, max(0.0, (d1["dark_sat"] - 45) / 50)), 2)
-        vib_params = {"whites": 0.4, "vibrance": 0.75, "dark_clean": 0.0}
+        if learned:
+            dc = learned["dc"]
+            vib_params = {"whites": learned["wh"], "vibrance": learned["vb"], "dark_clean": 0.0}
+        else:
+            dc = round(min(0.7, max(0.0, (d1["dark_sat"] - 45) / 50)), 2)
+            vib_params = {"whites": 0.4, "vibrance": 0.75, "dark_clean": 0.0}
         out = R["vibrance"]["fn"](out, vib_params)
         if dc > 0.05:
             out = region_apply(out, R["vibrance"]["fn"],
@@ -85,8 +103,8 @@ def process(img):
         out = R["straighten"]["fn"](out, {"strength": 1.0})
         record["steps"].append({"op": "straighten", "reason": f"scene={d0['scene']}"})
 
-    out = R["finish_detail"]["fn"](out, {"clarity": 0.8, "detail": 1.0, "black": 0.7})
-    record["steps"].append({"op": "finish_detail", "reason": "net + den sau chot"})
+    out = R["finish_detail"]["fn"](out, {"clarity": 0.8, "detail": 1.0, "black": learned["bk"]})
+    record["steps"].append({"op": "finish_detail", "black": learned["bk"], "reason": "net + den (lieu data)"})
 
     # TANG CHAT LIEU (25/07): mask tinh tren ANH GOC (mat nhin truoc khi model
     # lam sang — TV loa sau model bi mat dau, bug bat duoc 25/07), ap len ket qua.
