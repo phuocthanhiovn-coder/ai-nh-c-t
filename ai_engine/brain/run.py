@@ -38,16 +38,28 @@ def process(img):
 
     if masks is not None:
         from ai_engine.brain.material_grade import _warm_gate
-        # 25/07 (vòng chấm 10): trần/dầm GỖ ẤM không được thắp trắng như tường —
-        # loại vùng ấm khỏi mask kiến trúc (gỗ sẽ do material_grade xử riêng).
+        from ai_engine.specialists.segment_room.seg import segment_fine
+        # 25/07 (vòng chấm 10): trần/dầm GỖ ẤM không được thắp trắng như tường.
         arch = build_arch_mask(masks) * (1.0 - _warm_gate(out))
-        # thap goc: lieu theo vung toi CON LAI sau model, chi tren kien truc
+        # 25/07 (vòng chấm 12): NỘI THẤT trong tối (ghế/sofa/bàn) cũng phải được
+        # thắp — trước bị né oan vì mask chỉ có kiến trúc. Lò/TV vẫn miễn nhiễm
+        # (không nằm trong wood/fabric).
+        mats_pre = segment_fine(img)
+        furn = np.clip(mats_pre.get("wood", 0) + mats_pre.get("fabric", 0), 0, 1)
+        lift_mask = np.clip(arch + 0.85 * furn, 0.0, 1.0)
         need = max(0.0, min(1.0, (d1["dark_frac"] - 0.02) / 0.20))
         if need > 0.05:
-            amt = round(0.4 + 0.5 * need, 2)
-            out = region_apply(out, _sl.apply, {"amount": amt}, arch)
-            record["steps"].append({"op": "shadow_light@arch", "amount": amt,
-                                    "reason": f"vung toi sau model {d1['dark_frac']:.0%}, chi thap kien truc"})
+            amt = round(0.5 + 0.5 * need, 2)   # 25/07: nang cong thuc (san con toi nhe)
+            out = region_apply(out, _sl.apply, {"amount": amt}, lift_mask)
+            record["steps"].append({"op": "shadow_light@arch+furniture", "amount": amt,
+                                    "reason": f"vung toi sau model {d1['dark_frac']:.0%}, thap kien truc + noi that (ne do dien)"})
+            # KHU VANG goc vua thap: lam mat nhe vung toi da nang (chong "goc vang")
+            y_mid = np.maximum(out @ np.array([0.0722, 0.7152, 0.2126], dtype=np.float32), 1e-4)
+            dark_w = np.clip((0.42 - y_mid) / 0.30, 0, 1)
+            cool_mask = np.clip(lift_mask * dark_w, 0, 1)
+            if float(cool_mask.mean()) > 0.01:
+                out = region_apply(out, R["temperature"]["fn"], {"amount": -0.07}, cool_mask)
+                record["steps"].append({"op": "cool@dark", "reason": "khu vang vung toi vua thap"})
         # rua bun: chi kien truc (do vat/go giu mau)
         dc = round(min(0.7, max(0.0, (d1["dark_sat"] - 45) / 50)), 2)
         vib_params = {"whites": 0.4, "vibrance": 0.75, "dark_clean": 0.0}

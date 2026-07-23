@@ -145,8 +145,9 @@ def apply_material_grade(img, mats=None, record=None):
     m = mats.get("plant")
     if m is not None and frac(m) > _MIN_FRAC:
         def _plant(x, p):
-            # 25/07: chu che "vung cay bi toi" — NANG SANG truoc roi to xanh
+            # 25/07 v2: nang sang + LAM MAT nhe (chu che "cay con vang") + to xanh
             y = R["brightness"]["fn"](x, {"amount": 0.22})
+            y = R["temperature"]["fn"](y, {"amount": -0.05})
             return R["grass_green"]["fn"](y, {"strength": 0.45})
         out = region_apply(out, _plant, {}, m, feather_sigma=10)
         log.append({"op": "material:plant", "frac": round(frac(m), 3),
