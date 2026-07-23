@@ -20,3 +20,10 @@ tools/rclone.exe
 assets/
 *.zip
 *.log
+
+# ====== Noi bo — khong dua len repo mo ======
+tasks/
+tools/
+CLAUDE.md
+GEMINI.md
+test_cr3.py
