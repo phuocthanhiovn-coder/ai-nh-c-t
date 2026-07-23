@@ -1,0 +1,14 @@
+# Cấu hình huấn luyện mô hình Auto-Enhance (HDRnet)
+model:
+  name: "HDRNet"
+  proxy_size: 256
+  grid_bins: 8
+  grid_size: 16
+  channels: 12
+
+training:
+  epochs: 150
+  lr: 0.001
+  batch_size: 2
+  save_dir: "checkpoints"
+  checkpoint_name: "auto_enhance.pt"

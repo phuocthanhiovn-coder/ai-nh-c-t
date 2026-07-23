@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AutoHDR-clone — Demo chỉnh ảnh bất động sản</title>
+<style>
+  :root{
+    --ink:#1f2937;
+    --muted:#6b7280;
+    --line:#e5e7eb;
+    --bg:#f7f8fa;
+    --panel:#ffffff;
+    --accent:#2563eb;
+    --accent-dark:#1d4ed8;
+    --good:#16a34a;
+    --bad:#dc2626;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+  }
+  header{
+    padding:20px 32px;
+    background:var(--panel);
+    border-bottom:1px solid var(--line);
+  }
+  header h1{
+    margin:0;
+    font-size:20px;
+    font-weight:600;
+  }
+  header p{
+    margin:4px 0 0;
+    color:var(--muted);
+    font-size:13px;
+  }
+  main{
+    max-width:1100px;
+    margin:0 auto;
+    padding:28px 20px 60px;
+  }
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:24px;
+    margin-bottom:20px;
+  }
+  .row{
+    display:flex;
+    gap:16px;
+    flex-wrap:wrap;
+    align-items:flex-end;
+  }
+  .field{
+    flex:1;
+    min-width:220px;
+  }
+  label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    color:var(--muted);
+    margin-bottom:6px;
+  }
+  input[type=text]{
+    width:100%;
+    padding:10px 12px;
+    border:1px solid var(--line);
+    border-radius:6px;
+    font-size:14px;
+  }
+  #dropzone{
+    border:2px dashed var(--line);
+    border-radius:10px;
+    padding:28px;
+    text-align:center;
+    color:var(--muted);
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  #dropzone.drag{
+    border-color:var(--accent);
+    background:#eff6ff;
+  }
+  #dropzone strong{color:var(--ink);}
+  #fileInput{display:none;}
+  button{
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:6px;
+    padding:11px 22px;
+    font-size:14px;
+    font-weight:600;
+    cursor:pointer;
+    transition:background .15s;
+  }
+  button:hover{background:var(--accent-dark);}
+  button:disabled{background:#9ca3af;cursor:not-allowed;}
+  button.secondary{
+    background:var(--panel);
+    color:var(--accent);
+    border:1px solid var(--accent);
+  }
+  button.secondary:hover{background:#eff6ff;}
+  #status{
+    margin-top:14px;
+    font-size:13px;
+    color:var(--muted);
+    min-height:18px;
+  }
+  #status.err{color:var(--bad);}
+  #status.ok{color:var(--good);}
+
+  #compareWrap{display:none;}
+  .slider-box{
+    position:relative;
+    width:100%;
+    max-width:1000px;
+    margin:0 auto;
+    aspect-ratio:auto;
+    overflow:hidden;
+    border-radius:8px;
+    border:1px solid var(--line);
+    user-select:none;
+    background:#111;
+  }
+  .slider-box img{
+    display:block;
+    width:100%;
+    height:auto;
+    pointer-events:none;
+  }
+  .img-after-wrap{
+    position:absolute;
+    top:0; left:0;
+    height:100%;
+    width:50%;
+    overflow:hidden;
+  }
+  .img-after-wrap img{
+    height:100%;
+    width:auto;
+    max-width:none;
+  }
+  .divider{
+    position:absolute;
+    top:0;
+    bottom:0;
+    left:50%;
+    width:4px;
+    margin-left:-2px;
+    background:#fff;
+    box-shadow:0 0 6px rgba(0,0,0,.5);
+    cursor:ew-resize;
+  }
+  .divider::after{
+    content:"⇔";
+    position:absolute;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    width:34px;
+    height:34px;
+    background:#fff;
+    color:var(--ink);
+    border-radius:50%;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:16px;
+    box-shadow:0 1px 4px rgba(0,0,0,.4);
+  }
+  .tag{
+    position:absolute;
+    top:10px;
+    padding:3px 10px;
+    font-size:12px;
+    font-weight:600;
+    border-radius:4px;
+    background:rgba(17,24,39,.65);
+    color:#fff;
+    letter-spacing:.03em;
+  }
+  .tag.before{left:10px;}
+  .tag.after{right:10px;}
+
+  .meta{
+    display:flex;
+    gap:24px;
+    flex-wrap:wrap;
+    margin-top:16px;
+    font-size:13px;
+  }
+  .meta div span.k{color:var(--muted);margin-right:6px;}
+  .meta div span.v{font-weight:600;}
+
+  .actions{
+    margin-top:18px;
+    display:flex;
+    gap:12px;
+  }
+  footer{
+    text-align:center;
+    color:var(--muted);
+    font-size:12px;
+    padding:20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>AutoHDR-clone — Demo chỉnh ảnh bất động sản</h1>
+  <p>Tải ảnh gốc lên, xem trước/sau, tải ảnh đã chỉnh full-res. Chạy hoàn toàn local (localhost).</p>
+</header>
+
+<main>
+  <div class="panel">
+    <div id="dropzone">
+      <div>Kéo-thả ảnh vào đây, hoặc <strong>bấm để chọn file</strong></div>
+      <div style="font-size:12px;margin-top:6px;">JPG / PNG</div>
+      <input type="file" id="fileInput" accept=".jpg,.jpeg,.png,image/jpeg,image/png">
+    </div>
+
+    <div class="row" style="margin-top:18px;">
+      <div class="field">
+        <label for="commandInput">Lệnh chỉnh sửa (tuỳ chọn, tiếng Việt/Anh — để trống dùng plan mặc định)</label>
+        <input type="text" id="commandInput" placeholder="vd: tăng sáng nhẹ, ấm hơn">
+      </div>
+      <div>
+        <button id="submitBtn" disabled>Chỉnh ảnh</button>
+      </div>
+    </div>
+
+    <div id="status"></div>
+  </div>
+
+  <div class="panel" id="compareWrap">
+    <div class="slider-box" id="sliderBox">
+      <img id="imgBefore" alt="Before">
+      <div class="img-after-wrap" id="afterWrap">
+        <img id="imgAfter" alt="After">
+      </div>
+      <div class="divider" id="divider"></div>
+      <div class="tag before">TRƯỚC</div>
+      <div class="tag after">SAU</div>
+    </div>
+
+    <div class="meta">
+      <div><span class="k">Plan đã áp dụng:</span><span class="v" id="planApplied">—</span></div>
+      <div><span class="k">QC overall:</span><span class="v" id="qcOverall">—</span></div>
+      <div><span class="k">Kích thước:</span><span class="v" id="imgSize">—</span></div>
+    </div>
+
+    <div class="actions">
+      <button id="downloadBtn">Tải ảnh đã chỉnh (full-res)</button>
+      <button class="secondary" id="resetBtn">Chỉnh ảnh khác</button>
+    </div>
+  </div>
+</main>
+
+<footer>AutoHDR-clone · chỉ chạy trên 127.0.0.1:8123 · demo nội bộ, không dùng để gửi khách trực tiếp qua mạng ngoài</footer>
+
+<script>
+(function(){
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const commandInput = document.getElementById('commandInput');
+  const submitBtn = document.getElementById('submitBtn');
+  const statusEl = document.getElementById('status');
+  const compareWrap = document.getElementById('compareWrap');
+  const imgBefore = document.getElementById('imgBefore');
+  const imgAfter = document.getElementById('imgAfter');
+  const afterWrap = document.getElementById('afterWrap');
+  const divider = document.getElementById('divider');
+  const sliderBox = document.getElementById('sliderBox');
+  const planApplied = document.getElementById('planApplied');
+  const qcOverall = document.getElementById('qcOverall');
+  const imgSize = document.getElementById('imgSize');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const resetBtn = document.getElementById('resetBtn');
+
+  let selectedFile = null;
+  let editedBlobUrl = null;
+  let editedFilename = 'edited.jpg';
+
+  function setStatus(msg, kind){
+    statusEl.textContent = msg;
+    statusEl.className = kind || '';
+  }
+
+  function chooseFile(f){
+    if(!f) return;
+    const okType = /image\/(jpeg|png)/.test(f.type) || /\.(jpe?g|png)$/i.test(f.name);
+    if(!okType){
+      setStatus('File khong hop le — chi nhan JPG/PNG.', 'err');
+      return;
+    }
+    selectedFile = f;
+    submitBtn.disabled = false;
+    setStatus('Da chon: ' + f.name + ' (' + Math.round(f.size/1024) + ' KB). Bam "Chinh anh" de tiep tuc.');
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', (e) => chooseFile(e.target.files[0]));
+
+  ['dragenter','dragover'].forEach(evt => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.add('drag');
+    });
+  });
+  ['dragleave','drop'].forEach(evt => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      dropzone.classList.remove('drag');
+    });
+  });
+  dropzone.addEventListener('drop', (e) => {
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    chooseFile(f);
+  });
+
+  submitBtn.addEventListener('click', async () => {
+    if(!selectedFile) return;
+    submitBtn.disabled = true;
+    setStatus('Dang xu ly... (co the mat vai giay tren anh full-res)');
+
+    const beforeUrl = URL.createObjectURL(selectedFile);
+    imgBefore.src = beforeUrl;
+
+    const form = new FormData();
+    form.append('image', selectedFile, selectedFile.name);
+    const cmd = commandInput.value.trim();
+    if(cmd) form.append('command', cmd);
+
+    try{
+      const resp = await fetch('/edit', { method: 'POST', body: form });
+      if(!resp.ok){
+        let detail = resp.statusText;
+        try{ const j = await resp.json(); detail = j.detail || detail; }catch(_e){}
+        setStatus('Loi (' + resp.status + '): ' + detail, 'err');
+        submitBtn.disabled = false;
+        return;
+      }
+      const applied = resp.headers.get('X-Plan-Applied') || '(khong ro)';
+      const qc = resp.headers.get('X-QC-Overall') || '(khong ro)';
+
+      const blob = await resp.blob();
+      if(editedBlobUrl) URL.revokeObjectURL(editedBlobUrl);
+      editedBlobUrl = URL.createObjectURL(blob);
+      editedFilename = 'edited_' + selectedFile.name.replace(/\.[^.]+$/, '') + '.jpg';
+
+      imgAfter.onload = () => {
+        imgSize.textContent = imgAfter.naturalWidth + ' x ' + imgAfter.naturalHeight + ' px';
+      };
+      imgAfter.src = editedBlobUrl;
+
+      planApplied.textContent = applied;
+      qcOverall.textContent = qc;
+
+      compareWrap.style.display = 'block';
+      resetDivider();
+      setStatus('Xong. Keo con truot de so sanh Truoc/Sau.', 'ok');
+    }catch(err){
+      setStatus('Loi ket noi toi server: ' + err, 'err');
+    }finally{
+      submitBtn.disabled = false;
+    }
+  });
+
+  function resetDivider(){
+    setDividerPct(50);
+  }
+
+  function setDividerPct(pct){
+    pct = Math.max(0, Math.min(100, pct));
+    afterWrap.style.width = pct + '%';
+    divider.style.left = pct + '%';
+  }
+
+  let dragging = false;
+  divider.addEventListener('mousedown', (e) => { dragging = true; e.preventDefault(); });
+  window.addEventListener('mouseup', () => dragging = false);
+  window.addEventListener('mousemove', (e) => {
+    if(!dragging) return;
+    const rect = sliderBox.getBoundingClientRect();
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    setDividerPct(pct);
+  });
+  // touch support
+  divider.addEventListener('touchstart', () => dragging = true, {passive:true});
+  window.addEventListener('touchend', () => dragging = false);
+  window.addEventListener('touchmove', (e) => {
+    if(!dragging) return;
+    const rect = sliderBox.getBoundingClientRect();
+    const touch = e.touches[0];
+    const pct = ((touch.clientX - rect.left) / rect.width) * 100;
+    setDividerPct(pct);
+  }, {passive:true});
+  // click-to-set anywhere on slider
+  sliderBox.addEventListener('click', (e) => {
+    if(e.target === divider) return;
+    const rect = sliderBox.getBoundingClientRect();
+    const pct = ((e.clientX - rect.left) / rect.width) * 100;
+    setDividerPct(pct);
+  });
+
+  downloadBtn.addEventListener('click', () => {
+    if(!editedBlobUrl) return;
+    const a = document.createElement('a');
+    a.href = editedBlobUrl;
+    a.download = editedFilename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+
+  resetBtn.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    commandInput.value = '';
+    submitBtn.disabled = true;
+    compareWrap.style.display = 'none';
+    setStatus('');
+  });
+})();
+</script>
+
+</body>
+</html>

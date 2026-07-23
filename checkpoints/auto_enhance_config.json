@@ -1,0 +1,6 @@
+{
+  "arch": "v2",
+  "checkpoint": "checkpoints/gpu/CH_J.pt",
+  "model_kwargs": {"grid_bins": 10, "grid_size": 24, "proxy_res": 448, "width": 32},
+  "_note": "arch v1 = HDRNet pilot (RGB, proxy 256, checkpoints/auto_enhance.pt). arch v2 = HDRNetV2 (BGR thang, make_proxy). Sua file nay de doi model, khong sua code."
+}

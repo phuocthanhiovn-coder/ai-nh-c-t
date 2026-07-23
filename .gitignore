@@ -1,0 +1,22 @@
+# ====== TUYET DOI KHONG COMMIT ======
+# Anh khach hang + data train (rieng tu, nang)
+data/
+outputs/
+# Checkpoint model (nang; backup rieng tren Drive)
+checkpoints/*.pt
+checkpoints/**/*.pt
+checkpoints/**/*.meta
+# Bi mat: thong tin box GPU thue, token
+tools/box_creds.json
+tools/token.txt
+tools/token.err
+tools/*.pid
+
+# ====== Rac / binary ======
+__pycache__/
+*.pyc
+.pytest_cache/
+tools/rclone.exe
+assets/
+*.zip
+*.log

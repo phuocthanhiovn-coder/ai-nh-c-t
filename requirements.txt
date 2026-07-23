@@ -1,0 +1,29 @@
+# Core dependencies
+opencv-python>=4.8.0
+opencv-contrib-python>=4.8.0
+numpy>=1.24.0
+Pillow>=10.0.0
+scikit-image>=0.21.0
+scipy>=1.11.0
+
+# Deep Learning
+torch>=2.0.0
+torchvision>=0.15.0
+
+# Inpainting (LaMa)
+simple-lama-inpainting>=0.1.0
+
+# EXIF reading
+exifread>=3.0.0
+
+# API Server
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+
+# Utilities
+tqdm>=4.65.0
+
+# RAW image processing
+rawpy>=0.19.0
+gdown>=4.7.1
