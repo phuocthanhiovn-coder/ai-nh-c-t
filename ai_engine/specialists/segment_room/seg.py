@@ -51,8 +51,8 @@ def _load():
 
 _MATERIAL_NAME_GROUPS = {
     # nhom chat lieu -> tu khoa ten lop ADE20K (khop theo TEN tu id2label, khong hardcode index)
-    "dark_appliance": ["stove", "oven", "refrigerator", "television", "computer",
-                       "microwave", "monitor", "screen", "fireplace"],
+    "dark_appliance": ["stove", "oven", "refrigerator", "computer",
+                       "microwave", "fireplace"],
     "wood": ["table", "desk", "countertop", "chest of drawers", "wardrobe",
              "shelf", "chair", "bench", "stairs", "bannister", "coffee table"],
     "fabric": ["sofa", "cushion", "pillow", "curtain", "rug", "blanket",
@@ -61,6 +61,7 @@ _MATERIAL_NAME_GROUPS = {
     "fixture_white": ["sink", "toilet", "bathtub", "counter"],
     "window_glass": ["windowpane"],
     "art": ["painting", "poster", "mirror"],
+    "screen": ["television", "monitor", "screen", "crt"],
 }
 
 

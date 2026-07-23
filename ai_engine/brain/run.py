@@ -75,6 +75,18 @@ def process(img):
 
     out = R["finish_detail"]["fn"](out, {"clarity": 0.8, "detail": 1.0, "black": 0.7})
     record["steps"].append({"op": "finish_detail", "reason": "net + den sau chot"})
+
+    # TANG CHAT LIEU (25/07): mask tinh tren ANH GOC (mat nhin truoc khi model
+    # lam sang — TV loa sau model bi mat dau, bug bat duoc 25/07), ap len ket qua.
+    try:
+        from ai_engine.specialists.segment_room.seg import segment_fine
+        from ai_engine.brain.material_grade import apply_material_grade
+        mats = segment_fine(img)
+        mat_log = []
+        out = apply_material_grade(out, mats=mats, record=mat_log)
+        record["steps"].extend(mat_log)
+    except Exception as e:
+        record["steps"].append({"op": "material:SKIP", "reason": str(e)[:100]})
     return out, record
 
 
