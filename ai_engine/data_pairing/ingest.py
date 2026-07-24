@@ -112,9 +112,18 @@ def align_bracket_images(images):
     return out
 
 def process_cr3_to_rgb(cr3_path):
-    """Đọc file RAW (CR3/DNG/ARW) bằng rawpy và develop thành ảnh RGB ở kích thước một nửa để tối ưu tốc độ."""
+    """Develop RAW (CR3/DNG/ARW) FULL-SIZE (24/07: bỏ half_size — đây là 1 trong 2
+    thủ phạm làm ảnh 'before' nát nét, đo được lap 12 vs AutoHDR 146). half_size
+    hủy MỘT NỬA độ phân giải ngay từ develop — không cứu lại được ở bước sau.
+    Thêm khử nhiễu nhẹ + sharpen chuẩn của rawpy để nét như máy ảnh xuất."""
     with rawpy.imread(cr3_path) as raw:
-        rgb = raw.postprocess(use_camera_wb=True, half_size=True)
+        rgb = raw.postprocess(
+            use_camera_wb=True,
+            half_size=False,                 # FULL RES (truoc: True = nua cỡ)
+            output_bps=8,
+            no_auto_bright=False,
+            fbdd_noise_reduction=rawpy.FBDDNoiseReductionMode.Light,
+        )
         return rgb
 
 def merge_exposures(images):
@@ -389,9 +398,12 @@ def run_ingest(reset=False, before_root="data/raw/before", after_root="data/raw/
                     print(f"  [✗] Lỗi không đọc được ảnh after: {after_path}")
                     continue
                     
-                before_merged_resized = resize_to_max(before_merged, 2048)
-                after_img_resized = resize_to_max(after_img, 2048)
-                
+                # 24/07: giữ FULL-RES (trước ép 2048 = thủ phạm nát nét thứ 2).
+                # align/classify tự thu nhỏ nội bộ (ECC 512, proxy) nên không cần
+                # ép cạnh ở đây; cặp lưu ra full-res -> demo/giao nét thật.
+                before_merged_resized = resize_to_max(before_merged, 4096)
+                after_img_resized = resize_to_max(after_img, 4096)
+
                 align_score, aligned_before = align_before_after(before_merged_resized, after_img_resized)
                 edit_type, confidence = classify_edit_type(aligned_before, after_img_resized)
                 
