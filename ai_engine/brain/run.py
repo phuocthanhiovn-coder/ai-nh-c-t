@@ -20,7 +20,11 @@ from ai_engine.orchestrator.region_apply import (region_apply, build_arch_mask)
 from ai_engine.specialists.shadow_light import light as _sl
 
 
-def process(img):
+def process(img, sharpen=True, sharpen_strength=0.85):
+    """sharpen: bat detail_restore (Real-ESRGAN) cuoi chuoi — TRI "mo khong net
+    nhu HDR" (loi chu che nhieu vong; do 25/07: pipeline lap ~17-164 vs AutoHDR
+    131-610, detail_restore keo len gan bang). CHAM tren CPU (~55s@2048px) ->
+    chay GPU khi giao lo. Thieu weights -> tu bo qua."""
     R = REGISTRY
     record = {"steps": []}
 
@@ -117,6 +121,12 @@ def process(img):
         record["steps"].extend(mat_log)
     except Exception as e:
         record["steps"].append({"op": "material:SKIP", "reason": str(e)[:100]})
+
+    # PHUC NET CUOI (detail_restore, Real-ESRGAN) — tri "mo khong net nhu HDR".
+    if sharpen:
+        out = R["detail_restore"]["fn"](out, {"strength": sharpen_strength})
+        record["steps"].append({"op": "detail_restore", "strength": sharpen_strength,
+                                "reason": "phuc net that (Real-ESRGAN), keo lap gan AutoHDR"})
     return out, record
 
 

@@ -57,6 +57,24 @@ def apply_material_grade(img, mats=None, record=None):
         log.append({"op": "material:dark_appliance", "frac": round(frac(m), 3),
                     "reason": "lo/TV/tu lanh -> den sau trung tinh bong"})
 
+    # SUA HUE GO (25/07, chu che "go canh tu lanh ra mau bac"): segment hay BO SOT
+    # go lan voi inox/tuong -> go giu tong vang-xanh (hue ~28) thay vi do-am (hue
+    # ~12 nhu target). Sua GLOBAL theo warm_gate (nhan dung go, KHONG dung tu trang
+    # sat thap): dich hue vung am ve phia DO. Chi anh huong pixel hue 16-40 + du sat.
+    wg = _warm_gate(out)
+    if float(wg.mean()) > 0.01:
+        hsv = cv2.cvtColor((np.clip(out, 0, 1) * 255).astype(np.uint8), cv2.COLOR_BGR2HSV).astype(np.float32)
+        hue = hsv[..., 0]
+        # chi dich pixel vang-xanh (hue 16..40); dich ve ~12 (do-am), muc theo warm_gate
+        shift_zone = np.clip((hue - 14) / 26.0, 0, 1) * np.clip((40 - hue) / 26.0, 0, 1)
+        shift = wg * shift_zone * 12.0   # keo hue xuong toi da 12 do (ve do-am)
+        hsv[..., 0] = np.clip(hue - shift, 0, 179)
+        # them chut bao hoa cho go giau hon (target nau dam) — chi vung warm_gate
+        hsv[..., 1] = np.clip(hsv[..., 1] * (1.0 + wg * shift_zone * 0.18), 0, 255)
+        out = cv2.cvtColor(hsv.astype(np.uint8), cv2.COLOR_HSV2BGR).astype(np.float32) / 255.0
+        log.append({"op": "wood_hue_warm", "frac": round(float(wg.mean()), 3),
+                    "reason": "dich hue go ve do-am (bat go segment bo sot canh inox)"})
+
     m = mats.get("wood")
     if m is not None and frac(m) > _MIN_FRAC:
         gate = _warm_gate(out)
