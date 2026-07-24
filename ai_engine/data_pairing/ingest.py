@@ -398,11 +398,13 @@ def run_ingest(reset=False, before_root="data/raw/before", after_root="data/raw/
                     print(f"  [✗] Lỗi không đọc được ảnh after: {after_path}")
                     continue
                     
-                # 24/07: giữ FULL-RES (trước ép 2048 = thủ phạm nát nét thứ 2).
-                # align/classify tự thu nhỏ nội bộ (ECC 512, proxy) nên không cần
-                # ép cạnh ở đây; cặp lưu ra full-res -> demo/giao nét thật.
-                before_merged_resized = resize_to_max(before_merged, 4096)
-                after_img_resized = resize_to_max(after_img, 4096)
+                # 25/07: giữ 2048 cho cặp TRAIN (model xem proxy 384; full-res chỉ
+                # tốn disk 4× mà KHÔNG nét hơn — đo được: mờ đến từ GỘP BRACKET
+                # (warp+Mertens), không phải độ phân giải. Nét thật = detail_restore
+                # ở khâu GIAO, không phải ở ingest). half_size=False vẫn giữ vì
+                # develop full rồi downscale 2048 sắc hơn develop nửa cỡ.
+                before_merged_resized = resize_to_max(before_merged, 2048)
+                after_img_resized = resize_to_max(after_img, 2048)
 
                 align_score, aligned_before = align_before_after(before_merged_resized, after_img_resized)
                 edit_type, confidence = classify_edit_type(aligned_before, after_img_resized)
