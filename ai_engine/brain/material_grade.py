@@ -92,40 +92,61 @@ def apply_material_grade(img, mats=None, record=None):
         log.append({"op": "material:window_view", "frac": round(frac(m), 3),
                     "reason": "khung kinh: nen nang + khu mu + TO TROI dam"})
 
-    # 25/07: TAT MAC DINH — ban blob-fill ra mieng den lech/nham (tv4_j055),
-    # can quad-fit hinh chu nhat man hinh moi ship duoc. Bat lai khi lam xong.
+    # LAP MAN TV (25/07 v2 — QUAD-FIT): AutoHDR thay man dang phan chieu bang
+    # DEN TAT (loi chu vong 10: "TV chi co mau den"). Ban truoc blob-fill ra
+    # mieng lech/nham -> gio FIT HINH CHU NHAT XOAY (minAreaRect) vao mask man
+    # hinh, chi lap PHAN TRONG quad + giu vien (bezel), do bong glossy nhe theo
+    # truc doc -> giong man tat that. Chi lap khoi dat tieu chi hinh hoc.
+    # TAT MAC DINH (25/07, nghiem thu tv9): quad-fit da CHUAN (lap dung o TV,
+    # khong tran tuong nho giao mask mem) NHUNG chinh sach "luon lap den" SAI —
+    # AutoHDR KHONG lap den TV dong loat: anh j055 target GIU nguyen phan chieu,
+    # chi anh khac (chu che vong 10) moi lap den. Can tin hieu "nen lap hay giu"
+    # (vd: man qua sang/chay -> lap; man da toi co reflection dep -> giu) truoc
+    # khi bat. Code quad-fit giu lai san.
     _ENABLE_SCREEN_FILL = False
     m = mats.get("screen")
     if _ENABLE_SCREEN_FILL and m is not None and frac(m) > 0.004:
-        def _screen_fill(x, p):
-            """LAP MAN TV (roster nhom D, 25/07): man dang phan chieu sang ->
-            den tat nhu AutoHDR. Giu 12%% shading goc lam do bong glossy,
-            khu mau ve trung tinh."""
-            y = x @ np.array([0.0722, 0.7152, 0.2126], dtype=np.float32)
-            gray = (y * 0.12)[..., None]                       # toi ~ man tat
-            gloss = np.clip(y - np.percentile(y, 85), 0, 1)[..., None] * 0.25
-            return np.clip(gray + gloss, 0.0, 1.0).astype(np.float32).repeat(3, axis=2)
-        # mask cung + KHOA HINH HOC (25/07: mask tung bam nham vung kinh phan
-        # chieu -> lap den thanh vet loang; chi chap nhan khoi GON, CHU NHAT,
-        # ty le man hinh 1.1-2.6, dac >=60%)
         m_hard = (m > 0.30).astype(np.uint8)
         m_hard = cv2.erode(m_hard, np.ones((5, 5), np.uint8))
-        m_ok = np.zeros_like(m_hard, dtype=np.float32)
         n_lbl, lbl, stats, _ = cv2.connectedComponentsWithStats(m_hard, 8)
+        screen_mask = np.zeros(m_hard.shape, dtype=np.float32)
         kept = 0
         for i in range(1, n_lbl):
             x, y, bw, bh, area = stats[i]
-            if area < 0.0015 * m_hard.size:
+            if area < 0.0015 * m_hard.size or area > 0.35 * m_hard.size:
                 continue
-            solidity = area / max(bw * bh, 1)
-            aspect = bw / max(bh, 1)
-            if solidity >= 0.60 and 1.1 <= aspect <= 2.6:
-                m_ok[lbl == i] = 1.0
+            comp = (lbl == i).astype(np.uint8)
+            cnts, _ = cv2.findContours(comp, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if not cnts:
+                continue
+            rect = cv2.minAreaRect(max(cnts, key=cv2.contourArea))
+            (rw, rh) = rect[1]
+            if rw < 1 or rh < 1:
+                continue
+            long_s, short_s = max(rw, rh), min(rw, rh)
+            aspect = long_s / short_s
+            rect_area = rw * rh
+            fill_ratio = area / max(rect_area, 1)   # mask lap kin hinh chu nhat -> dung la man
+            if 1.2 <= aspect <= 2.8 and fill_ratio >= 0.72:
+                box = cv2.boxPoints(rect).astype(np.int32)
+                cv2.fillPoly(screen_mask, [box], 1.0)
                 kept += 1
         if kept > 0:
-            out = region_apply(out, _screen_fill, {}, m_ok, feather_sigma=3)
-            log.append({"op": "material:screen_fill", "frac": round(float(m_ok.mean()), 3),
-                        "reason": f"man TV that ({kept} khoi qua khoa hinh hoc) -> lap den glossy"})
+            # GIAO voi mask mem (25/07 fix tv8): quad cho cau truc chu nhat, nhung
+            # CHI lap noi SegFormer that su thay man hinh -> khong tran ra tuong.
+            screen_mask = screen_mask * (m > 0.12).astype(np.float32)
+            # bao ve vien (bezel) bang cach an mon nhe
+            inner = cv2.erode(screen_mask, np.ones((5, 5), np.uint8))
+
+            def _screen_fill(x, p):
+                y = x @ np.array([0.0722, 0.7152, 0.2126], dtype=np.float32)
+                gray = (y * 0.10)[..., None]                     # den man tat
+                gloss = np.clip(y - np.percentile(y, 88), 0, 1)[..., None] * 0.22
+                return np.clip(gray + gloss, 0.0, 1.0).astype(np.float32).repeat(3, axis=2)
+
+            out = region_apply(out, _screen_fill, {}, inner, feather_sigma=2)
+            log.append({"op": "material:screen_fill", "frac": round(float(inner.mean()), 4),
+                        "reason": f"lap {kept} man TV (quad-fit) -> den tat glossy, giu vien"})
 
     m = mats.get("art")
     if m is not None and frac(m) > 0.003:
