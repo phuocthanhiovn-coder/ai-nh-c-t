@@ -2,10 +2,14 @@
 # Anh khach hang + data train (rieng tu, nang)
 data/
 outputs/
-# Checkpoint model (nang; backup rieng tren Drive)
-checkpoints/*.pt
+# Checkpoint model (nang; backup rieng tren Drive) â€” MOI DUOI WEIGHTS
 checkpoints/**/*.pt
+checkpoints/**/*.pth
 checkpoints/**/*.meta
+checkpoints/**/*.ckpt
+checkpoints/**/*.onnx
+*.pt
+*.pth
 # Bi mat: thong tin box GPU thue, token
 tools/box_creds.json
 tools/token.txt
@@ -21,7 +25,7 @@ assets/
 *.zip
 *.log
 
-# ====== Noi bo — khong dua len repo mo ======
+# ====== Noi bo ï¿½ khong dua len repo mo ======
 tasks/
 tools/
 CLAUDE.md
