@@ -21,6 +21,7 @@ from ai_engine.specialists.harsh_sun import tone_map as sp_harsh
 from ai_engine.specialists.finish_detail import finish as sp_finish
 from ai_engine.specialists.vibrance import vib as sp_vib
 from ai_engine.specialists.shadow_light import light as sp_shadowlight
+from ai_engine.specialists.detail_restore import restore as sp_detail
 
 REGISTRY = {
     # ---- Op co ban (ops_basic) ----
@@ -111,6 +112,11 @@ REGISTRY = {
             "strength": {"type": "float", "min": 0.0, "max": 1.0, "default": 0.7},
             "saturation_boost": {"type": "float", "min": 0.0, "max": 0.6, "default": 0.25},
         },
+    },
+    "detail_restore": {
+        "fn": sp_detail.apply,
+        "desc": "Phuc net/chi tiet THAT bang Real-ESRGAN general (BSD-3, ban duoc). CHAM tren CPU — bat theo y (HD/premium) hoac chay GPU khi giao lo.",
+        "params": {"strength": {"type": "float", "min": 0.0, "max": 1.0, "default": 0.5}},
     },
     "shadow_light": {
         "fn": sp_shadowlight.apply,
