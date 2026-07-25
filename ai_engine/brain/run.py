@@ -20,13 +20,23 @@ from ai_engine.orchestrator.region_apply import (region_apply, build_arch_mask)
 from ai_engine.specialists.shadow_light import light as _sl
 
 
-def process(img, sharpen=True, sharpen_strength=1.0):
-    """sharpen: bat detail_restore (Real-ESRGAN) cuoi chuoi — TRI "mo khong net
-    nhu HDR" (loi chu che nhieu vong; do 25/07: pipeline lap ~17-164 vs AutoHDR
-    131-610, detail_restore keo len gan bang). CHAM tren CPU (~55s@2048px) ->
-    chay GPU khi giao lo. Thieu weights -> tu bo qua."""
+def process(img, sharpen=None, sharpen_strength=1.0):
+    """THICH UNG theo do net dau vao (25/07 — bai hoc job that): op tune cho data
+    MEM se NAU HONG input SAC (tuong loang lo, cua so nhu tranh ve). Do lap dau
+    vao: SAC (>=80, bracket that) -> profile NHE (khong detail_restore, finish
+    nhe); MEM (<80, data cu/anh don) -> profile MANH (co detail_restore).
+    sharpen=None -> tu quyet theo do net; True/False -> ep."""
     R = REGISTRY
     record = {"steps": []}
+
+    # do net dau vao -> chon profile
+    _g0 = cv2.cvtColor((np.clip(img, 0, 1) * 255).astype(np.uint8), cv2.COLOR_BGR2GRAY)
+    in_lap = cv2.Laplacian(_g0, cv2.CV_64F).var()
+    sharp_input = in_lap >= 80.0
+    if sharpen is None:
+        sharpen = not sharp_input        # input da sac thi KHONG detail_restore
+    record["input_lap"] = round(float(in_lap), 1)
+    record["profile"] = "gentle" if sharp_input else "strong"
 
     d0 = diagnose(img)                       # kham lan 1 (anh goc, co mat segment)
     record["diagnosis_before"] = {k: v for k, v in d0.items() if not k.startswith("_")}
@@ -78,8 +88,11 @@ def process(img, sharpen=True, sharpen_strength=1.0):
             if float(cool_mask.mean()) > 0.01:
                 out = region_apply(out, R["temperature"]["fn"], {"amount": -0.07}, cool_mask)
                 record["steps"].append({"op": "cool@dark", "reason": "khu vang vung toi vua thap"})
-        # rua bun: chi kien truc (do vat/go giu mau)
-        if learned:
+        # rua bun: chi kien truc (do vat/go giu mau). Input SAC -> vibrance nhe.
+        if sharp_input:
+            dc = 0.15
+            vib_params = {"whites": 0.3, "vibrance": 0.25, "dark_clean": 0.0}
+        elif learned:
             dc = learned["dc"]
             vib_params = {"whites": learned["wh"], "vibrance": learned["vb"], "dark_clean": 0.0}
         else:
@@ -96,19 +109,33 @@ def process(img, sharpen=True, sharpen_strength=1.0):
         out = R["vibrance"]["fn"](out, {"whites": 0.45, "vibrance": 0.7, "dark_clean": 0.35})
         record["steps"].append({"op": "fallback-global", "reason": "mat segment loi"})
 
-    fw = d0.get("frac_window", -1.0)
-    if fw >= 0.01 or fw < 0.0:
-        s = round(min(0.95, 0.5 + max(fw, 0.1) * 2.5), 2)
+    # CUA SO: KHU MU (dark channel prior) vung kinh — canh ngoai trong veo, het veo
+    # trang (loi chu che job that 25/07). Ap qua MASK cua so, khong dung phan khac.
+    # Thay window_pull tho (window_pull chi dung cho anh don chay, khong co day).
+    win_mask = None
+    if masks is not None:
+        win_mask = masks.get("window")
+    if win_mask is not None and float(win_mask.mean()) > 0.005:
+        out = region_apply(out, R["window_dehaze"]["fn"], {"strength": 0.75},
+                           win_mask, feather_sigma=4)
+        record["steps"].append({"op": "window_dehaze@mask",
+                                "reason": f"khu mu canh ngoai (cua so {float(win_mask.mean()):.0%})"})
+    elif not sharp_input and (d0.get("frac_window", -1.0) >= 0.01 or d0.get("frac_window", -1.0) < 0.0):
+        s = round(min(0.95, 0.5 + max(d0.get("frac_window", 0.1), 0.1) * 2.5), 2)
         out = R["window_pull"]["fn"](out, {"strength": s, "saturation_boost": 0.5})
-        record["steps"].append({"op": "window_pull", "strength": s,
-                                "reason": f"mat thay cua so {max(fw,0):.0%}"})
+        record["steps"].append({"op": "window_pull(fallback)", "strength": s})
 
     if d0["scene"] in ("interior", "exterior_ground", "general"):
         out = R["straighten"]["fn"](out, {"strength": 1.0})
         record["steps"].append({"op": "straighten", "reason": f"scene={d0['scene']}"})
 
-    out = R["finish_detail"]["fn"](out, {"clarity": 0.8, "detail": 1.0, "black": learned["bk"]})
-    record["steps"].append({"op": "finish_detail", "black": learned["bk"], "reason": "net + den (lieu data)"})
+    # finish_detail: input SAC chi cham nhe (tranh loang lo/gion); MEM day manh.
+    if sharp_input:
+        fd = {"clarity": 0.35, "detail": 0.25, "black": learned["bk"]}
+    else:
+        fd = {"clarity": 0.8, "detail": 1.0, "black": learned["bk"]}
+    out = R["finish_detail"]["fn"](out, fd)
+    record["steps"].append({"op": "finish_detail", **fd, "reason": f"profile={record['profile']}"})
 
     # TANG CHAT LIEU (25/07): mask tinh tren ANH GOC (mat nhin truoc khi model
     # lam sang — TV loa sau model bi mat dau, bug bat duoc 25/07), ap len ket qua.

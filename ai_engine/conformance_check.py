@@ -23,6 +23,7 @@ SPECIALISTS = [
     ("ai_engine.specialists.vibrance.vib", "apply"),
     ("ai_engine.specialists.shadow_light.light", "apply"),
     ("ai_engine.specialists.detail_restore.restore", "apply"),
+    ("ai_engine.specialists.window_dehaze.dehaze", "apply"),
 ]
 
 

@@ -22,6 +22,7 @@ from ai_engine.specialists.finish_detail import finish as sp_finish
 from ai_engine.specialists.vibrance import vib as sp_vib
 from ai_engine.specialists.shadow_light import light as sp_shadowlight
 from ai_engine.specialists.detail_restore import restore as sp_detail
+from ai_engine.specialists.window_dehaze import dehaze as sp_dehaze
 
 REGISTRY = {
     # ---- Op co ban (ops_basic) ----
@@ -112,6 +113,11 @@ REGISTRY = {
             "strength": {"type": "float", "min": 0.0, "max": 1.0, "default": 0.7},
             "saturation_boost": {"type": "float", "min": 0.0, "max": 0.6, "default": 0.25},
         },
+    },
+    "window_dehaze": {
+        "fn": sp_dehaze.apply,
+        "desc": "Khu mu/loa canh ngoai cua so (Dark Channel Prior) — troi/cay/nha trong veo. Goi qua mask cua so.",
+        "params": {"strength": {"type": "float", "min": 0.0, "max": 1.0, "default": 0.7}},
     },
     "detail_restore": {
         "fn": sp_detail.apply,
