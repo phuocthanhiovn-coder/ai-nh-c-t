@@ -63,10 +63,16 @@ def _align_homography_veto(imgs: list) -> list:
     orb = cv2.ORB_create(nfeatures=4000)
     kp_r, des_r = orb.detectAndCompute(gray_ref, None)
 
-    out = []
+    def _edge_ncc(a_gray, b_gray):
+        ga = cv2.convertScaleAbs(cv2.Laplacian(a_gray, cv2.CV_32F))
+        gb = cv2.convertScaleAbs(cv2.Laplacian(b_gray, cv2.CV_32F))
+        return float(cv2.minMaxLoc(cv2.matchTemplate(ga, gb, cv2.TM_CCOEFF_NORMED))[1])
+
+    max_shift = 0.25 * max(h, w)
+    gray_ref_full = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
+    out = [ref]
     for i, im in enumerate(imgs):
         if i == ref_i:
-            out.append(im)
             continue
         gray = clahe.apply(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
         kp, des = orb.detectAndCompute(gray, None)
@@ -78,10 +84,23 @@ def _align_homography_veto(imgs: list) -> list:
         matches = sorted(matches, key=lambda m: m.distance)[:500]
         src = np.float32([kp[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
         dst = np.float32([kp_r[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-        H, mask = cv2.findHomography(src, dst, cv2.RANSAC, 4.0)
-        if H is None or mask is None or int(mask.sum()) < 12:
+        # SIMILARITY 4-DOF (25/07): homography 8-DOF khớp bậy -> bắn góc ra vô cực
+        # -> VỆT TIA PHÓNG XẠ (bằng chứng 227A2152). Similarity không phối cảnh nên
+        # bất khả tạo vệt tia; + cổng lành mạnh + veto NCC 0.45 chống ghost chồng đôi.
+        M, mask = cv2.estimateAffinePartial2D(src, dst, method=cv2.RANSAC,
+                                              ransacReprojThreshold=4.0)
+        if M is None or mask is None or int(mask.sum()) < 12:
             continue
-        out.append(cv2.warpPerspective(im, H, (w, h), borderMode=cv2.BORDER_REPLICATE))
+        scale = float(np.sqrt(M[0, 0] ** 2 + M[0, 1] ** 2))
+        angle = abs(float(np.degrees(np.arctan2(M[1, 0], M[0, 0]))))
+        shift = float(np.hypot(M[0, 2], M[1, 2]))
+        if not (0.85 <= scale <= 1.18) or angle > 12.0 or shift > max_shift:
+            continue
+        warped = cv2.warpAffine(im, M, (w, h), flags=cv2.INTER_LANCZOS4,
+                                borderMode=cv2.BORDER_REPLICATE)
+        if _edge_ncc(cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY), gray_ref_full) < 0.45:
+            continue
+        out.append(warped)
     return out
 
 

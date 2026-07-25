@@ -55,14 +55,18 @@ def resize_to_max(img, max_dim=2048):
     return cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
 def align_bracket_images(images):
-    """Căn khớp các frame bracket về frame THAM CHIẾU bằng homography ORB+RANSAC,
-    frame không khớp được thì LOẠI (veto) — rồi mới MTB dọn rung tay còn sót.
+    """Căn khớp các frame bracket về frame THAM CHIẾU bằng SIMILARITY (scale+xoay+dịch)
+    ORB+RANSAC CÓ CHẶN, frame không khớp/khớp bậy thì LOẠI (veto). Xấu nhất còn 1
+    frame tham chiếu (vẫn là before hợp lệ) — pipeline KHÔNG BAO GIỜ nhả rác.
 
-    VÌ SAO (sửa 22/07/2026): bản cũ chỉ dùng cv2.AlignMTB — chỉ chỉnh dịch nhỏ
-    vài pixel. Job k000 (data mới) khách chụp các frame LỆCH VỊ TRÍ lớn →
-    MTB bó tay → Mertens gộp ra ảnh MA chồng 2-3 lớp (xem
-    outputs/review_check_k000_*.jpg), cả 34 cảnh rớt align_low. Homography +
-    veto trị tận gốc; xấu nhất còn 1 frame tham chiếu (vẫn là before hợp lệ).
+    VÌ SAO similarity thay homography (sửa 25/07/2026 — sau khi chủ chỉ 2 ảnh merge
+    HỎNG: k000_227A1947 ghost chồng đôi, 227A2152 VỠ THÀNH VỆT TIA PHÓNG XẠ):
+    homography 8-DOF khi khớp bậy sẽ BẮN 4 GÓC RA VÔ CỰC → warp + BORDER_REPLICATE
+    kéo thành vệt tia. Similarity 4-DOF (estimateAffinePartial2D) KHÔNG có thành
+    phần phối cảnh nên KHÔNG THỂ tạo vệt tia — về hình học là bất khả. Thêm cổng
+    lành mạnh (scale 0.85–1.18, |xoay|≤12°, dịch≤25% cạnh) loại luôn fit suy biến,
+    và siết veto NCC 0.30→0.45 (ghost lọt qua 0.30). Bản cũ dùng homography + veto
+    0.30 vẫn để lọt cả 2 lỗi trên.
     """
     if len(images) <= 1:
         return images
@@ -73,15 +77,15 @@ def align_bracket_images(images):
     ref_i = int(np.argmin(meds))
     ref = images[ref_i]
     h, w = ref.shape[:2]
+    max_shift = 0.25 * max(h, w)
 
     # CLAHE để frame thiếu/dư sáng vẫn ra feature cho ORB.
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
     gray_ref = clahe.apply(cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY))
 
-    out = []
+    out = [ref.copy()]  # tham chiếu luôn có mặt
     for i, im in enumerate(images):
         if i == ref_i:
-            out.append(im.copy())
             continue
         gray = clahe.apply(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
         res = extract_and_match(gray, gray_ref)
@@ -92,21 +96,28 @@ def align_bracket_images(images):
             continue
         src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
-        H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, INLIER_THRESHOLD)
-        if H is None or mask is None or int(mask.sum()) < MIN_MATCH_COUNT:
+        # SIMILARITY 4-DOF (scale+xoay+dịch) — KHÔNG phối cảnh nên không vệt tia.
+        M, mask = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.RANSAC,
+                                              ransacReprojThreshold=INLIER_THRESHOLD)
+        if M is None or mask is None or int(mask.sum()) < MIN_MATCH_COUNT:
             continue
-        # 25/07: LANCZOS4 thay bilinear (mặc định) — warp bilinear làm MỀM ảnh
-        # mỗi lần resample; Lanczos giữ nét hơn rõ, đây là 1 nguồn mờ của gộp bracket.
-        warped = cv2.warpPerspective(im, H, (w, h), flags=cv2.INTER_LANCZOS4,
-                                     borderMode=cv2.BORDER_REPLICATE)
-        # Kiểm chứng sau warp bằng NCC cạnh (bất biến tone) — dưới sàn thì veto.
+        # Cổng lành mạnh: chặn fit suy biến (scale/xoay/dịch phi lý).
+        scale = float(np.sqrt(M[0, 0] ** 2 + M[0, 1] ** 2))
+        angle = abs(float(np.degrees(np.arctan2(M[1, 0], M[0, 0]))))
+        shift = float(np.hypot(M[0, 2], M[1, 2]))
+        if not (0.85 <= scale <= 1.18) or angle > 12.0 or shift > max_shift:
+            continue
+        # LANCZOS4: warp bilinear làm MỀM ảnh mỗi lần resample; Lanczos giữ nét.
+        warped = cv2.warpAffine(im, M, (w, h), flags=cv2.INTER_LANCZOS4,
+                                borderMode=cv2.BORDER_REPLICATE)
+        # Kiểm chứng sau warp bằng NCC cạnh (bất biến tone) — siết 0.45 chống ghost.
         ncc = compute_edge_ncc(cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY),
                                cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY))
-        if ncc < 0.30:
+        if ncc < 0.45:
             continue
         out.append(warped)
 
-    # MTB cuối chỉ dọn dịch nhỏ còn sót giữa các frame ĐÃ khớp homography.
+    # MTB cuối chỉ dọn dịch nhỏ còn sót giữa các frame ĐÃ khớp similarity.
     if len(out) >= 2:
         try:
             cv2.createAlignMTB().process(out, out)
