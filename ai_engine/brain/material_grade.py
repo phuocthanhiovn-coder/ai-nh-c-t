@@ -184,13 +184,14 @@ def apply_material_grade(img, mats=None, record=None):
     m = mats.get("plant")
     if m is not None and frac(m) > _MIN_FRAC:
         def _plant(x, p):
-            # 25/07 v2: nang sang + LAM MAT nhe (chu che "cay con vang") + to xanh
-            y = R["brightness"]["fn"](x, {"amount": 0.22})
-            y = R["temperature"]["fn"](y, {"amount": -0.05})
-            return R["grass_green"]["fn"](y, {"strength": 0.45})
+            # 25/07 v3: CH_L da lo mau/tone -> op nay chi phu NHE, tranh neon.
+            # ha brightness 0.22->0.10, grass_green 0.45->0.20 (CH_L da xanh du).
+            y = R["brightness"]["fn"](x, {"amount": 0.10})
+            y = R["temperature"]["fn"](y, {"amount": -0.04})
+            return R["grass_green"]["fn"](y, {"strength": 0.20})
         out = region_apply(out, _plant, {}, m, feather_sigma=10)
         log.append({"op": "material:plant", "frac": round(frac(m), 3),
-                    "reason": "cay/hoa -> sang len + xanh tuoi (lieu xanh ha 0.6->0.45 chong neon)"})
+                    "reason": "cay/hoa -> phu nhe tren CH_L (bright 0.10 + xanh 0.20 chong neon)"})
 
     m = mats.get("fixture_white")
     if m is not None and frac(m) > _MIN_FRAC:

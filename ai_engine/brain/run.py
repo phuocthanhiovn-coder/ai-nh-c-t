@@ -109,17 +109,16 @@ def process(img, sharpen=None, sharpen_strength=1.0):
         out = R["vibrance"]["fn"](out, {"whites": 0.45, "vibrance": 0.7, "dark_clean": 0.35})
         record["steps"].append({"op": "fallback-global", "reason": "mat segment loi"})
 
-    # CUA SO: KHU MU (dark channel prior) vung kinh — canh ngoai trong veo, het veo
-    # trang (loi chu che job that 25/07). Ap qua MASK cua so, khong dung phan khac.
-    # Thay window_pull tho (window_pull chi dung cho anh don chay, khong co day).
-    win_mask = None
-    if masks is not None:
-        win_mask = masks.get("window")
-    if win_mask is not None and float(win_mask.mean()) > 0.005:
-        out = region_apply(out, R["window_dehaze"]["fn"], {"strength": 0.75},
-                           win_mask, feather_sigma=4)
-        record["steps"].append({"op": "window_dehaze@mask",
-                                "reason": f"khu mu canh ngoai (cua so {float(win_mask.mean()):.0%})"})
+    # CUA SO (25/07, bai hoc job that): input SAC/bracket -> MERGE DA LO CUA SO
+    # TU NHIEN nhat. Moi xu ly (dehaze/finish clarity) lam canh ngoai thanh
+    # "tranh ve/cat dan" (chu che). => BAO VE vung cua so: chi cho model chinh
+    # mau, KHONG dehaze, KHONG finish clarity. Luu ban cua so "sach" o day de
+    # cuoi chuoi ghep lai. Chi input MEM (anh don chay) moi can window_pull.
+    win_mask = masks.get("window") if masks is not None else None
+    win_clean = None
+    if sharp_input and win_mask is not None and float(win_mask.mean()) > 0.005:
+        # ban cua so hien tai (sau model mau) = tu nhien; giu lai, MIEN NHIEM finish.
+        win_clean = (out.copy(), np.clip(win_mask, 0, 1))
     elif not sharp_input and (d0.get("frac_window", -1.0) >= 0.01 or d0.get("frac_window", -1.0) < 0.0):
         s = round(min(0.95, 0.5 + max(d0.get("frac_window", 0.1), 0.1) * 2.5), 2)
         out = R["window_pull"]["fn"](out, {"strength": s, "saturation_boost": 0.5})
@@ -136,6 +135,15 @@ def process(img, sharpen=None, sharpen_strength=1.0):
         fd = {"clarity": 0.8, "detail": 1.0, "black": learned["bk"]}
     out = R["finish_detail"]["fn"](out, fd)
     record["steps"].append({"op": "finish_detail", **fd, "reason": f"profile={record['profile']}"})
+
+    # GHEP LAI cua so "sach" (miren nhiem finish clarity — canh ngoai tu nhien,
+    # het "tranh ve"). Feather mep de khong lo ranh.
+    if win_clean is not None:
+        wc_img, wc_mask = win_clean
+        wm = cv2.GaussianBlur(wc_mask, (0, 0), 4)[..., None]
+        out = out * (1.0 - wm) + wc_img * wm
+        record["steps"].append({"op": "window_protect",
+                                "reason": "giu cua so tu nhien tu merge, mien nhiem finish"})
 
     # TANG CHAT LIEU (25/07): mask tinh tren ANH GOC (mat nhin truoc khi model
     # lam sang — TV loa sau model bi mat dau, bug bat duoc 25/07), ap len ket qua.
