@@ -95,7 +95,10 @@ def align_bracket_images(images):
         H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, INLIER_THRESHOLD)
         if H is None or mask is None or int(mask.sum()) < MIN_MATCH_COUNT:
             continue
-        warped = cv2.warpPerspective(im, H, (w, h), borderMode=cv2.BORDER_REPLICATE)
+        # 25/07: LANCZOS4 thay bilinear (mặc định) — warp bilinear làm MỀM ảnh
+        # mỗi lần resample; Lanczos giữ nét hơn rõ, đây là 1 nguồn mờ của gộp bracket.
+        warped = cv2.warpPerspective(im, H, (w, h), flags=cv2.INTER_LANCZOS4,
+                                     borderMode=cv2.BORDER_REPLICATE)
         # Kiểm chứng sau warp bằng NCC cạnh (bất biến tone) — dưới sàn thì veto.
         ncc = compute_edge_ncc(cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY),
                                cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY))

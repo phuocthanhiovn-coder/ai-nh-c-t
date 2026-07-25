@@ -20,7 +20,7 @@ from ai_engine.orchestrator.region_apply import (region_apply, build_arch_mask)
 from ai_engine.specialists.shadow_light import light as _sl
 
 
-def process(img, sharpen=True, sharpen_strength=0.85):
+def process(img, sharpen=True, sharpen_strength=1.0):
     """sharpen: bat detail_restore (Real-ESRGAN) cuoi chuoi — TRI "mo khong net
     nhu HDR" (loi chu che nhieu vong; do 25/07: pipeline lap ~17-164 vs AutoHDR
     131-610, detail_restore keo len gan bang). CHAM tren CPU (~55s@2048px) ->
