@@ -81,6 +81,48 @@ def dark_fidelity(pred, target, thresh=0.28, l_weight=1.0, ab_weight=1.5):
 
 
 # ---------------------------------------------------------------------------
+# Colorfulness + local-contrast regularizers (25/07/2026 — CH_M, huong moi)
+# GOC benh "mau nhat/bot" = L1 hoi quy ve TRUNG BINH -> nhat + vi tuong phan thap
+# (chan doan tu workflow nghien cuu 25/07). 2 term nay day THONG KE output ve
+# khop target AutoHDR (punchy), thay vi de L1 keo ve trung binh nhat.
+# ---------------------------------------------------------------------------
+def colorfulness(img_bgr):
+    """Hasler-Susstrunk colorfulness / anh (BGR [0,1]) -> (N,). Cao = mau song."""
+    b, g, r = img_bgr[:, 0], img_bgr[:, 1], img_bgr[:, 2]  # moi (N,H,W)
+    rg = r - g
+    yb = 0.5 * (r + g) - b
+    std_root = torch.sqrt(rg.var(dim=(1, 2)) + yb.var(dim=(1, 2)) + 1e-8)
+    mean_root = torch.sqrt(rg.mean(dim=(1, 2)) ** 2 + yb.mean(dim=(1, 2)) ** 2 + 1e-8)
+    return std_root + 0.3 * mean_root
+
+
+def colorfulness_loss(pred, target):
+    """Phat output NHAT hon target manh (relu, chong desaturation) + bam nhe 2 chieu.
+    Target = AutoHDR (punchy) nen keo output len la dung huong."""
+    cp, ct = colorfulness(pred), colorfulness(target)
+    under = F.relu(ct - cp).mean()          # chi phat khi nhat hon target
+    track = (cp - ct).abs().mean()          # bam sat 2 chieu (nhe)
+    return under + 0.25 * track
+
+
+_LAP_K = torch.tensor([[0., 1., 0.], [1., -4., 1.], [0., 1., 0.]]).view(1, 1, 3, 3)
+
+
+def local_contrast_loss(pred, target):
+    """Khop nang luong Laplacian (vi tuong phan) tren luma. Day output SAC len bang
+    target (relu chong 'mo bot') + bam 2 chieu nhe. Guided-filter-free, tren luma
+    nen khong lech mau."""
+    def luma(x):
+        return (0.114 * x[:, 0:1] + 0.587 * x[:, 1:2] + 0.299 * x[:, 2:3])
+    k = _LAP_K.to(pred.dtype).to(pred.device)
+    lp = F.conv2d(luma(pred), k, padding=1).abs().mean(dim=(1, 2, 3))
+    lt = F.conv2d(luma(target), k, padding=1).abs().mean(dim=(1, 2, 3))
+    under = F.relu(lt - lp).mean()
+    track = (lp - lt).abs().mean()
+    return under + 0.25 * track
+
+
+# ---------------------------------------------------------------------------
 # CIE-Lab color loss (D65), torch-native & differentiable
 # ---------------------------------------------------------------------------
 # sRGB->XYZ matrix (D65), same coefficients OpenCV uses. Rows map RGB->XYZ.
@@ -239,7 +281,7 @@ class CombinedLoss(nn.Module):
 
     def __init__(self, w_l1=1.0, w_char=0.0, w_lab=0.0, w_perc=0.0,
                  lab_weights=(1.0, 1.0, 1.0), w_hi=0.0, hi_gamma=2.0,
-                 w_dark=0.0, dark_thresh=0.28):
+                 w_dark=0.0, dark_thresh=0.28, w_color=0.0, w_lc=0.0):
         super().__init__()
         self.w_l1 = float(w_l1)
         self.w_char = float(w_char)
@@ -249,6 +291,8 @@ class CombinedLoss(nn.Module):
         self.hi_gamma = float(hi_gamma)
         self.w_dark = float(w_dark)
         self.dark_thresh = float(dark_thresh)
+        self.w_color = float(w_color)
+        self.w_lc = float(w_lc)
 
         self.lab = LabLoss(*lab_weights) if self.w_lab != 0.0 else None
         self.perc = VGGPerceptual() if self.w_perc != 0.0 else None
@@ -286,6 +330,16 @@ class CombinedLoss(nn.Module):
             dk = dark_fidelity(pred, target, self.dark_thresh)
             terms["dark"] = self.w_dark * dk
             total = total + terms["dark"]
+
+        if self.w_color != 0.0:
+            col = colorfulness_loss(pred, target)
+            terms["color"] = self.w_color * col
+            total = total + terms["color"]
+
+        if self.w_lc != 0.0:
+            lc = local_contrast_loss(pred, target)
+            terms["lc"] = self.w_lc * lc
+            total = total + terms["lc"]
 
         terms["total"] = total
         return total, terms

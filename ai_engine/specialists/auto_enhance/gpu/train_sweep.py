@@ -407,6 +407,8 @@ def train_one(cfg: dict) -> dict:
         hi_gamma=float(loss_cfg.get("hi_gamma", 2.0)),
         w_dark=float(loss_cfg.get("w_dark", 0.0)),
         dark_thresh=float(loss_cfg.get("dark_thresh", 0.28)),
+        w_color=float(loss_cfg.get("w_color", 0.0)),
+        w_lc=float(loss_cfg.get("w_lc", 0.0)),
     ).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     # torch 2.2.x compat: GradScaler lives under torch.cuda.amp (torch.amp.GradScaler is 2.3+)
