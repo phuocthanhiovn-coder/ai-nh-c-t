@@ -126,17 +126,22 @@ def align_bracket_images(images):
             pass
     return out
 
-def process_cr3_to_rgb(cr3_path):
+def process_cr3_to_rgb(cr3_path, no_auto_bright=False):
     """Develop RAW (CR3/DNG/ARW) FULL-SIZE (24/07: bỏ half_size — đây là 1 trong 2
     thủ phạm làm ảnh 'before' nát nét, đo được lap 12 vs AutoHDR 146). half_size
     hủy MỘT NỬA độ phân giải ngay từ develop — không cứu lại được ở bước sau.
-    Thêm khử nhiễu nhẹ + sharpen chuẩn của rawpy để nét như máy ảnh xuất."""
+    Thêm khử nhiễu nhẹ + sharpen chuẩn của rawpy để nét như máy ảnh xuất.
+
+    26/07 GỐC BỆNH MERGE: tấm THÀNH VIÊN BRACKET phải develop với
+    no_auto_bright=True — auto-bright SAN BẰNG phơi sáng mọi tấm (~165 luma)
+    → vứt sạch dynamic range (cửa sổ/đèn cháy) TRƯỚC khi Mertens gộp. Ảnh ĐƠN
+    (không bracket) giữ auto-bright như cũ."""
     with rawpy.imread(cr3_path) as raw:
         rgb = raw.postprocess(
             use_camera_wb=True,
             half_size=False,                 # FULL RES (truoc: True = nua cỡ)
             output_bps=8,
-            no_auto_bright=False,
+            no_auto_bright=no_auto_bright,
             fbdd_noise_reduction=rawpy.FBDDNoiseReductionMode.Light,
         )
         return rgb
@@ -401,7 +406,8 @@ def run_ingest(reset=False, before_root="data/raw/before", after_root="data/raw/
             try:
                 raw_images = []
                 for cr3_path in bracket_files:
-                    rgb = process_cr3_to_rgb(cr3_path)
+                    # 26/07: bracket member -> GIU phoi sang that (fix goc benh merge)
+                    rgb = process_cr3_to_rgb(cr3_path, no_auto_bright=(bracket_size >= 2))
                     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                     raw_images.append(bgr)
                     
