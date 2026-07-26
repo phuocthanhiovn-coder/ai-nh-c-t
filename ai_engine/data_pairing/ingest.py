@@ -92,7 +92,8 @@ def align_bracket_images(images):
         if res is None:
             continue
         kp1, kp2, matches = res
-        if len(matches) < MIN_MATCH_COUNT:
+        # tam RAT TOI (no_auto_bright -> luma ~2) it/khong feature -> matches None: veto.
+        if matches is None or len(matches) < MIN_MATCH_COUNT:
             continue
         src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
