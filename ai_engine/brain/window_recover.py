@@ -27,14 +27,21 @@ def recover_windows(before, out, win_mask, feather=3.0):
     Trả out với vùng cửa sổ = cảnh ngoài đã kéo xuống (trung tính, lộ nhà/cây)."""
     if win_mask is None or float(win_mask.max()) <= 0:
         return out
+    b = np.clip(before, 0, 1).astype(np.float32)
+    # BAO VE vat SANG-AM tren be cua (den/fixture): nha ngoai trung tinh/lanh, den
+    # AM (R>B) + rat sang -> giu nguyen (khong keo xuong -> khong nhoe nhu proof cu).
+    lum = b @ np.array([0.114, 0.587, 0.299], dtype=np.float32)
+    warm = b[..., 2] - b[..., 0]                      # R - B
+    keep = np.clip((lum - 0.62) / 0.38, 0, 1) * np.clip(warm / 0.12, 0, 1)
+    eff = np.clip(win_mask.astype(np.float32) * (1.0 - keep), 0, 1)
+
     recov = _recover_exterior(before)
-    # trung tính cast (grey-world) CHỈ trong vùng cửa sổ
-    sel = win_mask > 0.5
+    sel = eff > 0.5
     if int(sel.sum()) > 50:
         mean = recov[sel].reshape(-1, 3).mean(0)
         g = float(mean.mean())
         recov = np.clip(recov * (g / (mean + 1e-6)), 0, 1)
-    fmask = cv2.GaussianBlur(win_mask.astype(np.float32), (0, 0), feather)[..., None]
+    fmask = cv2.GaussianBlur(eff, (0, 0), feather)[..., None]
     return np.clip(out * (1.0 - fmask) + recov * fmask, 0, 1)
 
 
