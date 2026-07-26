@@ -42,6 +42,18 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     record["diagnosis_before"] = {k: v for k, v in d0.items() if not k.startswith("_")}
     masks = d0.get("_masks")
 
+    # 26/07: model đời CH_N+ (train trên data merge ĐÚNG) tự lo sáng-đều/màu →
+    # cụm op bù (shadow_light/vibrance/dark_clean) thành CHỒNG LIỀU (đèn cháy,
+    # cửa sổ mù — bằng chứng outputs/minimal_vs_full.jpg). Cờ model_complete
+    # trong auto_enhance_config.json bật chuỗi TỐI GIẢN.
+    model_complete = False
+    try:
+        with open("checkpoints/auto_enhance_config.json", "r", encoding="utf-8") as _f:
+            model_complete = bool(json.load(_f).get("model_complete", False))
+    except Exception:
+        pass
+    record["model_complete"] = model_complete
+
     out = R["denoise"]["fn"](img, {"denoise_strength": 0.35, "sharpen_amount": 0.0})
     record["steps"].append({"op": "denoise", "reason": "khu nhieu truoc model"})
     out = R["auto_enhance"]["fn"](out, {})
@@ -61,7 +73,10 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     learned = {"sl": 0.16, "wh": 0.30, "vb": 0.36, "dc": 0.34, "bk": 0.58}
     record["learned_doses"] = learned
 
-    if masks is not None:
+    if model_complete:
+        record["steps"].append({"op": "minimal-chain",
+                                "reason": "model CH_N+ tu lo sang-deu/mau; bo op bu chong lieu"})
+    elif masks is not None:
         from ai_engine.brain.material_grade import _warm_gate
         from ai_engine.specialists.segment_room.seg import segment_fine
         # 25/07 (vòng chấm 10): trần/dầm GỖ ẤM không được thắp trắng như tường.
@@ -137,25 +152,34 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     out = R["finish_detail"]["fn"](out, fd)
     record["steps"].append({"op": "finish_detail", **fd, "reason": f"profile={record['profile']}"})
 
-    # KEO CUA SO XUONG (sau finish -> khong bi lam "tranh ve"): lo nha/cay tu ANH
-    # GOC nhu AutoHDR, trung tinh cast. Dung mask mat-moi gsam (26/07).
+    # KEO CUA SO XUONG — CO DIEU KIEN (26/07): CH_N+ da giu cua so tot; recover
+    # grey-world de len chi lam MU (bang chung minimal_vs_full.jpg). Chi recover
+    # khi vung cua so trong OUTPUT that su CHAY (luma cao + sat thap).
     if win_mask_gsam is not None:
-        from ai_engine.brain.window_recover import recover_windows
-        out = recover_windows(img, out, win_mask_gsam)
-        record["steps"].append({"op": "window_recover",
-                                "reason": "keo phoi sang cua so lo canh ngoai (mat gsam)"})
+        sel = win_mask_gsam > 0.5
+        if int(sel.sum()) > 100:
+            wl = float((out @ np.array([0.114, 0.587, 0.299], dtype=np.float32))[sel].mean())
+            wsat = float(np.abs(out[sel] - out[sel].mean(axis=-1, keepdims=True)).mean())
+            if wl > 0.82 and wsat < 0.03:      # cua so van chay -> moi keo
+                from ai_engine.brain.window_recover import recover_windows
+                out = recover_windows(img, out, win_mask_gsam)
+                record["steps"].append({"op": "window_recover",
+                                        "reason": f"cua so con chay (luma {wl:.2f}) -> keo tu anh goc"})
+            else:
+                record["steps"].append({"op": "window_keep",
+                                        "reason": f"model giu cua so tot (luma {wl:.2f}) -> khong dong them"})
 
-    # TANG CHAT LIEU (25/07): mask tinh tren ANH GOC (mat nhin truoc khi model
-    # lam sang — TV loa sau model bi mat dau, bug bat duoc 25/07), ap len ket qua.
-    try:
-        from ai_engine.specialists.segment_room.seg import segment_fine
-        from ai_engine.brain.material_grade import apply_material_grade
-        mats = segment_fine(img)
-        mat_log = []
-        out = apply_material_grade(out, mats=mats, record=mat_log)
-        record["steps"].extend(mat_log)
-    except Exception as e:
-        record["steps"].append({"op": "material:SKIP", "reason": str(e)[:100]})
+    # TANG CHAT LIEU (25/07) — BO khi model_complete (op tune cho model cu).
+    if not model_complete:
+        try:
+            from ai_engine.specialists.segment_room.seg import segment_fine
+            from ai_engine.brain.material_grade import apply_material_grade
+            mats = segment_fine(img)
+            mat_log = []
+            out = apply_material_grade(out, mats=mats, record=mat_log)
+            record["steps"].extend(mat_log)
+        except Exception as e:
+            record["steps"].append({"op": "material:SKIP", "reason": str(e)[:100]})
 
     # PHUC NET CUOI (detail_restore, Real-ESRGAN) — tri "mo khong net nhu HDR".
     if sharpen:
