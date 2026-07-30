@@ -71,7 +71,11 @@ def apply(img, params=None):
     anchor = np.percentile(base, _ANCHOR_PCT)
     k_dark = 1.0 - amount * (1.0 - _K_DARK_MIN)
     delta = base - anchor
-    compressed = np.where(delta < 0.0, delta * k_dark, delta * _K_BRIGHT)
+    # FIX 30/07: _K_BRIGHT co dinh 0.92 -> nen vung SANG 8% NGAY CA khi amount~0
+    # (khong lien tuc tai 0: amount=0 la identity, amount=0.001 mat 8% highlight)
+    # -> cua so mat ~0.32EV, highlight bet/bac. Cho k_bright ti le theo amount.
+    k_bright = 1.0 - amount * (1.0 - _K_BRIGHT)
+    compressed = np.where(delta < 0.0, delta * k_dark, delta * k_bright)
 
     # Bảo vệ đen thật: blend về base gốc khi base (tuyến tính) dưới sàn.
     base_lin = np.exp2(base)

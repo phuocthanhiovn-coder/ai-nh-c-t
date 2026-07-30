@@ -14,7 +14,10 @@ import numpy as np
 # Preset hieu chinh ~80-85% do lech do duoc (tranh qua tay), tinh chinh bang mat.
 PRESETS = {
     # trong nha: thieu bao hoa 18% + tuong phan + khu mu (black point) chua "mo bot"
-    "indoor":  dict(sat=1.26, warm_b=0.3, warm_a=0.5, contrast=1.10, clarity=0.22, black=8, chroma_dn=2, sharpen=0.85),
+    # FIX 30/07 (do tren BENCH-10): black=8 + contrast=1.10 lam 1.15% khung anh MAT
+    # HET chi tiet vung toi (den chet 3.1% -> 7.8%), pixel chay +70%, bao hoa +47%
+    # -> "den nhiem xam / cua so bet trang". Ha ve muc an toan.
+    "indoor":  dict(sat=1.10, warm_b=0.3, warm_a=0.5, contrast=1.02, clarity=0.22, black=2, chroma_dn=2, sharpen=0.85),
     # ngoai troi that su (troi/cay): bao hoa manh + am, nhung khong qua tay
     "outdoor": dict(sat=1.36, warm_b=2.2, warm_a=1.5, contrast=1.06, clarity=0.15, black=9, chroma_dn=2, sharpen=0.70),
 }

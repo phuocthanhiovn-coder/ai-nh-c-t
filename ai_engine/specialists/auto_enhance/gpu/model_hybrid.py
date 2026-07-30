@@ -154,7 +154,7 @@ class HybridNet(nn.Module):
                        nn.LeakyReLU(0.2, inplace=True)]
         self.lut_cnn = nn.Sequential(*blocks)
         self.lut_w = nn.Linear(ch[-1], n_basis)
-        nn.init.zeros_(self.lut_w.weight)
+        nn.init.normal_(self.lut_w.weight, 0.0, 0.02)   # xem model_nm.py: diem chet LUT
         with torch.no_grad():
             b = torch.zeros(n_basis); b[0] = 1.0
             self.lut_w.bias.copy_(b)                    # khởi đầu = LUT identity
@@ -176,19 +176,26 @@ class HybridNet(nn.Module):
         """Retinex: tỉ lệ (thân xuất / vào) → lọc tần thấp = bản đồ chiếu sáng.
         Lọc tần thấp là chốt an toàn: mọi chi tiết/texture thân BỊA ra đều bị
         loại, chỉ còn thông tin 'vùng này nên sáng hơn/tối hơn bao nhiêu'."""
-        enh = self.trunk(proxy).clamp(0, 1)
-        ratio = (enh + 1e-3) / (proxy + 1e-3)
+        # NAFNet pretrain la RGB, pipeline cua ta la BGR (fix 30/07): khong dao kenh
+        # thi kien thuc pretrain bi ap sai kenh -> lech mau he thong.
+        enh = self.trunk(proxy.flip(1)).flip(1)
+        enh = enh + (enh.clamp(0, 1) - enh).detach()   # straight-through clamp
+        # CLAMP TRUOC KHI LAM MO (fix 30/07): 1 pixel gan den (proxy~0) cho ratio ~500,
+        # trung binh o 8x8 thanh ~8 -> clamp ve tran 3.0 -> CA VUNG bi keo sang toi da
+        # => bong toi bi nang xam/bac mau (dung benh chu che). Clamp truoc, pool sau.
+        ratio = ((enh + 0.02) / (proxy + 0.02)).clamp(1.0 / self.gain_clip, self.gain_clip)
         k = max(2, self.gain_blur)
         low = F.avg_pool2d(ratio, k, k, ceil_mode=True)
         low = F.interpolate(low, size=ratio.shape[2:], mode="bilinear", align_corners=False)
-        return low.clamp(1.0 / self.gain_clip, self.gain_clip), enh
+        return low, enh
 
     def forward(self, proxy, full):
         p = proxy if proxy.shape[-1] == self.proxy_res else F.interpolate(
             proxy, size=(self.proxy_res, self.proxy_res), mode="bilinear", align_corners=False)
         gain, enh = self._gain_from_trunk(p)
         gain_up = F.interpolate(gain, size=full.shape[2:], mode="bilinear", align_corners=False)
-        x = (full * gain_up).clamp(0, 1)
+        x = full * gain_up
+        x = x + (x.clamp(0, 1) - x).detach()          # straight-through clamp
         f = self.lut_cnn(enh)
         f = F.adaptive_avg_pool2d(f, 1).flatten(1)
         w = self.lut_w(f)

@@ -259,7 +259,10 @@ def align_before_after(before_img, after_img):
             warp_matrix_affine_large[0, 2] = warp_matrix_affine[0, 2] * s
             warp_matrix_affine_large[1, 2] = warp_matrix_affine[1, 2] * s
             
-            aligned_before_final = cv2.warpAffine(aligned_before_rough, warp_matrix_affine_large, (w, h), borderMode=cv2.BORDER_REPLICATE)
+            aligned_before_final = cv2.warpAffine(
+                aligned_before_rough, warp_matrix_affine_large, (w, h),
+                flags=cv2.INTER_LANCZOS4 + cv2.WARP_INVERSE_MAP,
+                borderMode=cv2.BORDER_REPLICATE)
         except cv2.error:
             pass
             

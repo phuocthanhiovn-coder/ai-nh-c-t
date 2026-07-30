@@ -11,6 +11,16 @@ import re
 import shutil
 import argparse
 
+# LOI NGHIEM TRONG (30/07): job co ten file/thu muc TIENG VIET lam print() chet
+# ('charmap' codec can't encode) -> job crash giua duong, 0 cap duoc tao du DA TAI
+# anh ve. Ep stdout/stderr UTF-8 ngay trong module de khong phu thuoc bien moi
+# truong nguoi chay dat.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import cv2
 import numpy as np
 

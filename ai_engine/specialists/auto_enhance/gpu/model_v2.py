@@ -207,7 +207,11 @@ class HDRNetV2(nn.Module):
         inp = full_res_img.unsqueeze(1)              # [B, 1, 3, H, W]
         transformed = torch.sum(inp * color_matrix, dim=2)  # [B, 3, H, W]
         output = transformed + translation
-        return torch.clamp(output, 0.0, 1.0)
+        # STRAIGHT-THROUGH CLAMP (fix 30/07): clamp thuong lam gradient = 0 o dung
+        # cho can hoc nhat -> loss chong chay sang (cua so) va giu den sau (do vat)
+        # co gradient BANG 0 TUYET DOI suot 4 thi nghiem. Giu gia tri kep, giu gradient.
+        clamped = torch.clamp(output, 0.0, 1.0)
+        return output + (clamped - output).detach()
 
     def forward(self, proxy, full_res_img):
         # proxy: [B, 3, proxy_res, proxy_res]; full_res_img: [B, 3, H, W]

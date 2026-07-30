@@ -118,6 +118,17 @@ class CropPairDataset(Dataset):
         # that starves the GPU when many configs share the CPUs. The operator
         # net predicts a low-res bilateral grid, so a 1280-capped source does
         # not hurt operator quality (eval/delivery still apply at full-res).
+        # ⚠️ LOI THAM KHOC PHAT HIEN 30/07/2026 (ra soat toan bo code):
+        # cache_cap la KICH THUOC PIXEL canh dai, KHONG phai so anh. Cac lan train
+        # CH_M..CH_N/CH_O/NM_A dat cache_cap=60..120 -> moi anh bi thu ve 60px roi
+        # PHONG NGUOC len 512 de crop => model hoc tren anh 45x45 pixel, nang luong
+        # chi tiet thap hon anh that ~450 LAN. Ca before va after cung mo nhu nhau
+        # nen loss KHONG BAO GIO bao loi -> so lieu dep ma anh that te.
+        # Tu nay: cache_cap phai >= 2*crop, khong thi chan cung.
+        if cache_ram and self.cache_cap and self.cache_cap < 2 * self.crop_size:
+            raise ValueError(
+                f"cache_cap={self.cache_cap} < 2*crop={2 * self.crop_size}: crop se bi "
+                "PHONG TU ANH MO (loi 30/07). Dat cache_cap>=1280 hoac cache_ram=False.")
         self.cache = {}
         if cache_ram:
             for fn in self.filenames:
@@ -125,7 +136,14 @@ class CropPairDataset(Dataset):
                 a = cv2.imread(os.path.join(self.after_dir, fn), cv2.IMREAD_COLOR)
                 if b is None or a is None:
                     continue
+                if b.shape[:2] != a.shape[:2]:
+                    # cap lech kich thuoc -> resize se BOP MEO ti le anh after ->
+                    # cap lech nhau -> model hoc ra anh MO de hoa giai. Bo cap nay.
+                    print(f"[data] BO cap lech kich thuoc {fn}: before {b.shape[:2]} "
+                          f"!= after {a.shape[:2]}", flush=True)
+                    continue
                 self.cache[fn] = (self._cap(b), self._cap(a))
+            self.filenames = [fn for fn in self.filenames if fn in self.cache]
 
     def _cap(self, img):
         h, w = img.shape[:2]
@@ -151,6 +169,10 @@ class CropPairDataset(Dataset):
             if before_img is None or after_img is None:
                 raise FileNotFoundError(f"Khong doc duoc cap anh: {filename}")
 
+        if before_img.shape[:2] != after_img.shape[:2]:
+            raise ValueError(f"{filename}: before {before_img.shape[:2]} != after "
+                             f"{after_img.shape[:2]} (cap lech -> model hoc ra anh mo)")
+        proxy_src_img = before_img          # proxy dung CA ANH (xem duoi)
         c = self.crop_size
         h, w = before_img.shape[:2]
 
@@ -175,16 +197,22 @@ class CropPairDataset(Dataset):
         after_crop = after_img[y:y + c, x:x + c]
 
         # Random horizontal flip (train only), applied identically to both.
-        if self.is_train and random.random() > 0.5:
+        flipped = self.is_train and random.random() > 0.5
+        if flipped:
             before_crop = cv2.flip(before_crop, 1)
             after_crop = cv2.flip(after_crop, 1)
+            proxy_src_img = cv2.flip(proxy_src_img, 1)
 
         before_t = torch.from_numpy(before_crop.transpose(2, 0, 1).copy()).float() / 255.0
         after_t = torch.from_numpy(after_crop.transpose(2, 0, 1).copy()).float() / 255.0
 
-        # Build the proxy FROM the crop, with the model's own differentiable
-        # area-resample helper. make_proxy returns [1,3,pr,pr]; drop the batch.
-        proxy_t = HDRNetV2.make_proxy(before_t, self.proxy_res).squeeze(0)
+        # PROXY DUNG CA ANH, khong phai tu mieng crop (fix 30/07).
+        # Truoc day proxy dung tu crop 512 -> nhanh toan cuc cua model chi thay 1
+        # mieng tuong khi hoc, nhung luc chay that lai nhan CA PHONG => lech phan
+        # phoi hoan toan. NMNet quang cao "cho model nhin ca phong" ma khi train
+        # chua bao gio duoc nhin ca phong.
+        proxy_src = torch.from_numpy(proxy_src_img.transpose(2, 0, 1).copy()).float() / 255.0
+        proxy_t = HDRNetV2.make_proxy(proxy_src, self.proxy_res).squeeze(0)
         return before_t, proxy_t, after_t
 
 

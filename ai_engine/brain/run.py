@@ -130,6 +130,14 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     # dung cua so -> keo phoi sang tu ANH GOC (bracket merge co noi dung nha). Tinh
     # mask o day; GHEP sau finish (de finish khong lam canh ngoai thanh "tranh ve").
     from ai_engine.brain.window_recover import get_window_mask
+    # ⚠️ FIX 30/07: DOC THANG PHAI CHAY TRUOC khi tinh mask. Truoc day mask (cua so,
+    # vat lieu) tinh tren anh GOC roi ap len anh DA XOAY-ZOOM -> lech 60-480 pixel tren
+    # anh 6024px => mau canh ngoai to len TUONG canh cua so ("cua so nhu tranh ve"),
+    # cong thuc go to len vat khac ("do vat cai sang cai toi").
+    if d0["scene"] in ("interior", "exterior_ground", "general"):
+        out = R["straighten"]["fn"](out, {"strength": 1.0})
+        img = R["straighten"]["fn"](img, {"strength": 1.0})   # nguon 'before' cung hinh hoc
+        record["steps"].append({"op": "straighten(dau chuoi)", "reason": f"scene={d0['scene']}"})
     _before_u8 = (np.clip(img, 0, 1) * 255).astype(np.uint8)
     win_mask_gsam = get_window_mask(_before_u8)
     if win_mask_gsam is not None:
@@ -140,9 +148,7 @@ def process(img, sharpen=None, sharpen_strength=1.0):
         out = R["window_pull"]["fn"](out, {"strength": s, "saturation_boost": 0.5})
         record["steps"].append({"op": "window_pull(fallback)", "strength": s})
 
-    if d0["scene"] in ("interior", "exterior_ground", "general"):
-        out = R["straighten"]["fn"](out, {"strength": 1.0})
-        record["steps"].append({"op": "straighten", "reason": f"scene={d0['scene']}"})
+    # (straighten da chay o DAU chuoi — xem fix 30/07 phia tren)
 
     # finish_detail: input SAC chi cham nhe (tranh loang lo/gion); MEM day manh.
     if sharp_input:

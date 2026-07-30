@@ -296,8 +296,12 @@ def apply(img, params=None):
                      dtype=np.float64)
         H_full = Z @ H_full
 
+    # ⚠️ FIX 30/07 (thu pham CHINH cua "anh khong net"): thieu flags -> OpenCV dung
+    # INTER_LINEAR -> resample anh MASTER full-res mat 54% nang luong canh (do tren
+    # BENCH-10: lap 286 -> 133; Lanczos giu 243). ingest.py da hoc bai nay tu lau.
     result = cv2.warpPerspective(
         working.astype(np.float32, copy=False), H_full.astype(np.float64), (w, h),
+        flags=cv2.INTER_LANCZOS4,
         borderMode=cv2.BORDER_REPLICATE,
     )
     return result

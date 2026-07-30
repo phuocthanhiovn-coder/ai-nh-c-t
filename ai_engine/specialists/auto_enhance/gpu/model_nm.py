@@ -61,7 +61,10 @@ class NMNet(nn.Module):
         nn.init.zeros_(self.gain_head.bias)          # khoi dau: gain = 1 (identity)
         # LUT head: vector toan cuc -> trong so basis
         self.lut_w = nn.Linear(b * 8, n_basis)
-        nn.init.zeros_(self.lut_w.weight)
+        # KHONG zero_ (fix 30/07): zero weight + basis[k>=1]=0 la DIEM CHET toan hoc
+        # -> 5/6 basis LUT vinh vien khong nhan gradient -> "LUT thich ung 6 bang"
+        # thuc te chi la 1 bang nhan 1 so. Repo goc init normal 0.02 dung de pha the.
+        nn.init.normal_(self.lut_w.weight, 0.0, 0.02)
         with torch.no_grad():
             bias = torch.zeros(n_basis); bias[0] = 1.0
             self.lut_w.bias.copy_(bias)              # khoi dau: LUT identity
@@ -113,7 +116,8 @@ class NMNet(nn.Module):
         gain = torch.exp(self.gain_amp * torch.tanh(self.gain_head(d)))   # (N,3,h,w)
         gain_up = F.interpolate(gain, size=full.shape[2:], mode="bilinear",
                                 align_corners=False)
-        x = (full * gain_up).clamp(0, 1)
+        x = full * gain_up
+        x = x + (x.clamp(0, 1) - x).detach()      # straight-through: giu gradient cho gain
         w = self.lut_w(g)                                                # (N,K)
         lut = torch.einsum("nk,kcdef->ncdef", w, self.basis)
         B, G, R = x[:, 0], x[:, 1], x[:, 2]
