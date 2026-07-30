@@ -26,9 +26,21 @@ from ai_engine.specialists.auto_enhance.gpu.finish_grade import grade_auto
 from ai_engine.specialists.auto_enhance.bracket_deliver import load_model
 
 ROOT = Path(__file__).resolve().parents[2]
-CKPT = str(ROOT / "checkpoints" / "gpu" / "CH_C.pt")
-MAX_W = 1600          # cap chiều rộng xử lý cho nhanh, vẫn nét khi xem web
-JPEG_Q = 95
+# FIX 30/07: truoc day hardcode CH_C (doi CU, CLAUDE.md ghi ro "lam BAC MAU") va
+# bo qua config -> moi cai tien cho CH_N khong bao gio den duong nay. Doc config.
+def _cfg_ckpt():
+    import json
+    p = ROOT / "checkpoints" / "auto_enhance_config.json"
+    try:
+        return str(ROOT / json.loads(p.read_text(encoding="utf-8"))["checkpoint"])
+    except Exception as e:
+        raise RuntimeError(f"Khong doc duoc {p}: {e} — KHONG duoc am tham dung model cu")
+
+
+CKPT = _cfg_ckpt()
+MAX_W = 0             # FIX 30/07: 0 = KHONG ha kich thuoc. Truoc day cap 1600px lam
+                      # anh 6024px giao ra mo oan (dung benh "anh khong net" chu che).
+JPEG_Q = 100
 
 app = Flask(__name__)
 
@@ -173,7 +185,7 @@ def _to_data_url(bgr):
 def process_image(bgr):
     """Pipeline chỉnh 1 ảnh: cap ~1600px -> operator CH_C -> grade tự động."""
     h, w = bgr.shape[:2]
-    if w > MAX_W:
+    if MAX_W and w > MAX_W:
         nh = int(round(h * MAX_W / w))
         bgr = cv2.resize(bgr, (MAX_W, nh), interpolation=cv2.INTER_AREA)
     ai = apply_fullres(MODEL, bgr, DEVICE)

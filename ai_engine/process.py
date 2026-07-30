@@ -39,6 +39,19 @@ from ai_engine.specialists.auto_enhance.bracket_merge import group_brackets
 _IMG_EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".webp")
 
 
+
+def _cfg_ckpt():
+    """FIX 30/07: truoc day hardcode CH_C (doi CU bac mau) va bo qua config ->
+    moi cai tien cho CH_N khong bao gio den duong giao hang nay."""
+    import json as _j, os as _o
+    p = _o.path.join(_o.path.abspath(_o.path.join(_o.path.dirname(__file__), *[".."]*2)),
+                     "checkpoints", "auto_enhance_config.json")
+    if not _o.path.exists(p):
+        p = "checkpoints/auto_enhance_config.json"
+    with open(p, encoding="utf-8") as f:
+        return _j.load(f)["checkpoint"]
+
+
 def _list_images(folder):
     """Liệt kê ảnh trong folder (không đệ quy), sort tên."""
     return sorted(
@@ -57,7 +70,8 @@ def _report(out_path):
 
 
 def process_folder(in_dir, out_dir, brackets=1, grade=True,
-                   ckpt="checkpoints/gpu/CH_C.pt"):
+                   ckpt=None):
+    ckpt = ckpt or _cfg_ckpt()
     """Nhận folder ảnh khách -> lưu ảnh đã chỉnh vào out_dir (q100 4:4:4, giữ res gốc).
 
     brackets == 1: mỗi ảnh đơn -> operator -> grade -> <ten_goc>_edited.jpg.
@@ -165,7 +179,7 @@ def main():
     ap.add_argument("--brackets", type=int, default=1,
                     help="Số ảnh mỗi bộ bracket (1 = ảnh đơn)")
     ap.add_argument("--no-grade", action="store_true", help="Tắt bước grade")
-    ap.add_argument("--ckpt", default="checkpoints/gpu/CH_C.pt", help="Checkpoint model")
+    ap.add_argument("--ckpt", default=None, help="Checkpoint model")
     ap.add_argument("--selftest", action="store_true", help="Tự test rồi thoát")
     args = ap.parse_args()
 

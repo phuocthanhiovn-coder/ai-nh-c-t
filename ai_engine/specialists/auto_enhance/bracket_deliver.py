@@ -40,7 +40,21 @@ from ai_engine.specialists.auto_enhance.gpu.finish_grade import grade_auto
 from ai_engine.specialists.auto_enhance.bracket_merge import merge_brackets, group_brackets
 
 
-def load_model(ckpt="checkpoints/gpu/CH_C.pt", device=None):
+
+def _cfg_ckpt():
+    """FIX 30/07: truoc day hardcode CH_C (doi CU bac mau) va bo qua config ->
+    moi cai tien cho CH_N khong bao gio den duong giao hang nay."""
+    import json as _j, os as _o
+    p = _o.path.join(_o.path.abspath(_o.path.join(_o.path.dirname(__file__), *[".."]*4)),
+                     "checkpoints", "auto_enhance_config.json")
+    if not _o.path.exists(p):
+        p = "checkpoints/auto_enhance_config.json"
+    with open(p, encoding="utf-8") as f:
+        return _j.load(f)["checkpoint"]
+
+
+def load_model(ckpt=None, device=None):
+    ckpt = ckpt or _cfg_ckpt()
     """Nạp checkpoint CH_C + cấu hình từ .meta -> (model eval, device cpu)."""
     device = device or torch.device("cpu")
     cfg = load_cfg(ckpt + ".meta", device)
@@ -59,7 +73,8 @@ def deliver_bracket(paths: list, model, device, grade: bool = True) -> np.ndarra
     return grade_auto(ai, paths[0]) if grade else ai
 
 
-def deliver_folder(folder, out_dir, group_size=0, grade=True, ckpt="checkpoints/gpu/CH_C.pt"):
+def deliver_folder(folder, out_dir, group_size=0, grade=True, ckpt=None):
+    ckpt = ckpt or _cfg_ckpt()
     """Gom bracket trong folder -> deliver từng cái -> lưu hdr_NNN.jpg q100 4:4:4."""
     model, device = load_model(ckpt)
     groups = group_brackets(folder, group_size=group_size)
@@ -165,7 +180,7 @@ def main():
                     help="Số ảnh mỗi bracket (0 = tự đoán theo EXIF)")
     ap.add_argument("--out", default="outputs/bracket_deliver", help="Thư mục lưu ảnh ra")
     ap.add_argument("--no-grade", action="store_true", help="Bỏ bước grade")
-    ap.add_argument("--ckpt", default="checkpoints/gpu/CH_C.pt", help="Checkpoint model màu")
+    ap.add_argument("--ckpt", default=None, help="Checkpoint model màu")
     args = ap.parse_args()
 
     if args.test:

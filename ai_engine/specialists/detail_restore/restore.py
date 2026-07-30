@@ -79,7 +79,13 @@ def apply(img, params=None):
             cy0, cx0 = (y0 - py0) * 4, (x0 - px0) * 4
             up[y0 * 4:y1 * 4, x0 * 4:x1 * 4] = sr[cy0:cy0 + (y1 - y0) * 4,
                                                   cx0:cx0 + (x1 - x0) * 4]
-    # thu nho ve dung size goc (INTER_AREA giu chi tiet)
+    # FIX 30/07: vong SR x4 -> thu nho INTER_AREA hoat dong nhu bo KHU NHIEU o
+    # full-res (do duoc lap 29.8 -> 20.0 = -33% tren crop that) => con "phuc net"
+    # dang LAM MEM anh. Chi GHEP DAI TAN CAO cua ban SR len anh GOC nguyen ven:
+    # khong lam mo tan thap, khong doi mau, khong "nhua".
     restored = cv2.resize(up, (w, h), interpolation=cv2.INTER_AREA)
-    out = img * (1.0 - strength) + restored * strength
+    sig = max(1.0, 0.0015 * min(h, w))
+    low_res = cv2.GaussianBlur(restored, (0, 0), sigmaX=sig)
+    detail = restored - low_res                     # chi tiet SR moi them
+    out = img + strength * detail
     return np.clip(out, 0.0, 1.0).astype(np.float32)
