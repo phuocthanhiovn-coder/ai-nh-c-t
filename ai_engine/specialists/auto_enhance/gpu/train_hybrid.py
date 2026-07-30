@@ -74,8 +74,15 @@ def train_hybrid(cfg: dict) -> dict:
             self.base = base
 
         def forward(self, out, tgt):
+            # _run_epoch cua train_sweep unpack `loss, terms = criterion(...)`
+            # -> PHAI tra CAP (fix 30/07, cung ho voi loi cell E5:
+            # "'tuple' object has no attribute 'backward'").
+            loss, terms = self.base(out, tgt)
             tv, mn = model.lut_regularizers()
-            return self.base(out, tgt) + w_tv * tv + w_mn * mn
+            total = loss + w_tv * tv + w_mn * mn
+            terms = dict(terms or {})
+            terms.update({"lut_tv": float(tv.detach()), "lut_mn": float(mn.detach())})
+            return total, terms
 
     reg_crit = _WithLutReg(criterion).to(device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)

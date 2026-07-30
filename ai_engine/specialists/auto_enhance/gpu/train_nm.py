@@ -79,9 +79,13 @@ def train_nm(cfg: dict) -> dict:
             self.base = base
 
         def forward(self, out, tgt):
-            loss = self.base(out, tgt)
+            # _run_epoch unpack `loss, terms = criterion(...)` -> PHAI tra CAP
+            loss, terms = self.base(out, tgt)
             tv, mn = model.lut_regularizers()
-            return loss + w_tv * tv + w_mn * mn
+            total = loss + w_tv * tv + w_mn * mn
+            terms = dict(terms or {})
+            terms.update({"lut_tv": float(tv.detach()), "lut_mn": float(mn.detach())})
+            return total, terms
 
     reg_crit = _WithLutReg(criterion).to(device)
 
