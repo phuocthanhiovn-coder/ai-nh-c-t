@@ -20,6 +20,12 @@ from .train_sweep import (CropPairDataset, SWEEP_CSV_DIR, _run_epoch,
 
 
 def train_hybrid(cfg: dict) -> dict:
+    # FIX 30/07: thieu gieo seed -> A/B "1 bien duy nhat" bi nhieu boi khoi tao va
+    # thu tu crop ngau nhien (luat L2 task 27 bi vo hieu hoa).
+    import random as _rnd
+    import numpy as _np
+    _seed = int(cfg.get("seed", 1234))
+    _rnd.seed(_seed); _np.random.seed(_seed); torch.manual_seed(_seed)
     device = torch.device(cfg.get("device", "cuda") if torch.cuda.is_available() else "cpu")
     data_dir = cfg["data_dir"]
     crop = int(cfg.get("crop", 512))
@@ -109,7 +115,10 @@ def train_hybrid(cfg: dict) -> dict:
         t0 = time.time()
         tr, _ = _run_epoch(model, train_loader, device, reg_crit, optimizer, scaler, use_amp, True)
         if val_loader is not None:
-            vt, vl = _run_epoch(model, val_loader, device, reg_crit, optimizer, scaler, use_amp, False)
+            # FIX 30/07: val PHAI dung loss SACH. Dung reg_crit thi best_val co the
+            # "tot len" chi vi basis LUT co lai (w_mn=10, khong phu thuoc anh) ->
+            # checkpoint duoc chon theo regularizer chu khong theo chat luong anh.
+            vt, vl = _run_epoch(model, val_loader, device, criterion, optimizer, scaler, use_amp, False)
         else:
             vt, vl = float("nan"), float("nan")
         sec = time.time() - t0

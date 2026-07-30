@@ -18,6 +18,10 @@ from .train_sweep import (CropPairDataset, SWEEP_CSV_DIR, _run_epoch,
 
 
 def train_nm(cfg: dict) -> dict:
+    import random as _rnd
+    import numpy as _np
+    _seed = int(cfg.get("seed", 1234))
+    _rnd.seed(_seed); _np.random.seed(_seed); torch.manual_seed(_seed)   # fix 30/07
     device = torch.device(cfg.get("device", "cuda") if torch.cuda.is_available() else "cpu")
     data_dir = cfg["data_dir"]
     crop = int(cfg.get("crop", 512))
