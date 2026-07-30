@@ -100,4 +100,6 @@ class NMNet(nn.Module):
         grid = torch.stack([2 * B - 1, 2 * G - 1, 2 * R - 1], dim=-1).unsqueeze(1)
         out = F.grid_sample(lut, grid, mode="bilinear", padding_mode="border",
                             align_corners=True).squeeze(2)
-        return out.clamp(0, 1)
+        # tra CAP (output, phu) khop hop dong _run_epoch cua train_sweep
+        # (fix 30/07: tra 1 tensor lam Colab cell 3 chet "too many values to unpack")
+        return out.clamp(0, 1), {"gain": gain}
