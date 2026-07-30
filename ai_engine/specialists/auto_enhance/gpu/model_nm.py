@@ -88,6 +88,26 @@ class NMNet(nn.Module):
         d, _ = self._features(proxy)
         return torch.exp(self.gain_amp * torch.tanh(self.gain_head(d)))
 
+    def lut_regularizers(self):
+        """KỶ LUẬT cho LUT — học từ repo gốc HuiZeng/Image-Adaptive-3DLUT (Apache,
+        clone 30/07 vào external/). Bản LUT tôi tự viết 25/07 THIẾU 2 cái này nên
+        ra artifact + underfit (CH_LUT: vệt sáng lệch tường, glow gương vàng gắt):
+
+        - tv (smooth): phạt chênh lệch giữa các ô LUT kề nhau -> mặt biến đổi màu
+          TRƠN, hết banding/vệt. Gốc: lambda_smooth 1e-4.
+        - mn (monotonicity): phạt LUT đi NGƯỢC (sáng vào -> tối ra) -> hết đảo màu,
+          hết glow gắt. Gốc: lambda_monotonicity 10.0 (nặng nhất trong loss).
+        Trả (tv, mn) để vòng train cộng vào loss.
+        """
+        L = self.basis                     # (K,3,D,D,D)
+        dif_r = L[..., :-1] - L[..., 1:]
+        dif_g = L[..., :-1, :] - L[..., 1:, :]
+        dif_b = L[..., :-1, :, :] - L[..., 1:, :, :]
+        tv = (dif_r ** 2).mean() + (dif_g ** 2).mean() + (dif_b ** 2).mean()
+        relu = F.relu
+        mn = relu(dif_r).mean() + relu(dif_g).mean() + relu(dif_b).mean()
+        return tv, mn
+
     def forward(self, proxy, full):
         d, g = self._features(proxy)
         gain = torch.exp(self.gain_amp * torch.tanh(self.gain_head(d)))   # (N,3,h,w)
