@@ -56,7 +56,9 @@ def highlight_protection(pred, target, gamma=2.0):
             + 0.587 * target[:, 1:2]
             + 0.299 * target[:, 2:3])                      # BGR luminance
     w = luma.clamp(0.0, 1.0) ** gamma                      # emphasize highlights
-    return (over * w).mean()
+    # FIX 30/07: .mean() chia cho TOAN BO pixel trong khi w gan 0 khap noi ->
+    # term chong chay sang chi con 0.26% gradient. Chuan hoa theo tong trong so.
+    return (over * w).sum() / (w.sum() + 1e-6)
 
 
 # ---------------------------------------------------------------------------
@@ -91,8 +93,8 @@ def colorfulness(img_bgr):
     b, g, r = img_bgr[:, 0], img_bgr[:, 1], img_bgr[:, 2]  # moi (N,H,W)
     rg = r - g
     yb = 0.5 * (r + g) - b
-    std_root = torch.sqrt(rg.var(dim=(1, 2)) + yb.var(dim=(1, 2)) + 1e-8)
-    mean_root = torch.sqrt(rg.mean(dim=(1, 2)) ** 2 + yb.mean(dim=(1, 2)) ** 2 + 1e-8)
+    std_root = torch.sqrt(rg.var(dim=(1, 2)) + yb.var(dim=(1, 2)) + 1e-6)
+    mean_root = torch.sqrt(rg.mean(dim=(1, 2)) ** 2 + yb.mean(dim=(1, 2)) ** 2 + 1e-6)
     return std_root + 0.3 * mean_root
 
 
@@ -168,7 +170,7 @@ def bgr_to_lab(img_bgr):
 
     # f(t)
     def f(t):
-        return torch.where(t > _LAB_EPS, torch.clamp(t, min=1e-8) ** (1.0 / 3.0),
+        return torch.where(t > _LAB_EPS, torch.clamp(t, min=1e-6) ** (1.0 / 3.0),
                            (_LAB_KAPPA * t + 16.0) / 116.0)
 
     fx = f(xyz[:, 0:1])

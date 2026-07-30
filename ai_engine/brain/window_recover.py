@@ -9,6 +9,15 @@ import cv2
 import numpy as np
 
 
+def _clahe_grid(shape, frac=0.015):
+    """FIX 30/07: luoi CLAHE co dinh 8x8 -> o 753x503px tren anh 6024 =>
+    chenh phoi sang 2.5 LAN giua cac o = dung benh 'cho sang cho toi'.
+    Cho o ~1.5% canh ngan de CLAHE tro lai dung nghia 'tuong phan cuc bo'."""
+    h, w = shape[:2]
+    side = max(8.0, frac * min(h, w))
+    return (max(2, int(round(w / side))), max(2, int(round(h / side))))
+
+
 def _recover_exterior(before):
     """Kéo highlight cửa sổ xuống + tăng tương phản cục bộ + trung tính cast."""
     b = np.clip(before, 0, 1).astype(np.float32)
@@ -18,11 +27,11 @@ def _recover_exterior(before):
     recov = b * (1.0 - 0.55 * w_hi)
     # local contrast (CLAHE trên L) — lộ vân vách/mái nhà
     lab = cv2.cvtColor((np.clip(recov, 0, 1) * 255).astype(np.uint8), cv2.COLOR_BGR2LAB)
-    lab[:, :, 0] = cv2.createCLAHE(2.2, (8, 8)).apply(lab[:, :, 0])
+    lab[:, :, 0] = cv2.createCLAHE(1.6, _clahe_grid(lab.shape)).apply(lab[:, :, 0])
     return cv2.cvtColor(lab, cv2.COLOR_LAB2BGR).astype(np.float32) / 255.0
 
 
-def recover_windows(before, out, win_mask, feather=3.0):
+def recover_windows(before, out, win_mask, feather=None):
     """before/out float[0,1] BGR HxWx3; win_mask float[0,1] HxW (kính cửa sổ).
     Trả out với vùng cửa sổ = cảnh ngoài đã kéo xuống (trung tính, lộ nhà/cây)."""
     if win_mask is None or float(win_mask.max()) <= 0:
@@ -36,11 +45,11 @@ def recover_windows(before, out, win_mask, feather=3.0):
     eff = np.clip(win_mask.astype(np.float32) * (1.0 - keep), 0, 1)
 
     recov = _recover_exterior(before)
-    sel = eff > 0.5
-    if int(sel.sum()) > 50:
-        mean = recov[sel].reshape(-1, 3).mean(0)
-        g = float(mean.mean())
-        recov = np.clip(recov * (g / (mean + 1e-6)), 0, 1)
+    # FIX 30/07: BO grey-world o day. Vung cua so la cho DUY NHAT ma gia dinh
+    # "trung binh vung = xam" CHAC CHAN sai (troi xanh, cay xanh, hoang hon cam).
+    # Do duoc: mau canh ngoai mat 55% chroma; troi xanh thuan bi ep ve xam hoan toan.
+    if feather is None:   # FIX 30/07: 3px = 0.05% anh 6024 -> duong seam cung
+        feather = max(3.0, 0.005 * min(eff.shape[:2]))
     fmask = cv2.GaussianBlur(eff, (0, 0), feather)[..., None]
     return np.clip(out * (1.0 - fmask) + recov * fmask, 0, 1)
 

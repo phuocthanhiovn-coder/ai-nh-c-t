@@ -127,15 +127,23 @@ def pair_jpg(before_dir, after_dir, prefix):
             continue
         score, aligned = align_before_after(b_res, a)
         if score >= ALIGN_OK:
-            cv2.imwrite(dst_b, aligned, [cv2.IMWRITE_JPEG_QUALITY, 95])
-            cv2.imwrite(os.path.join("data/pairs/after", out_name), a, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            cv2.imwrite(dst_b, aligned, [cv2.IMWRITE_JPEG_QUALITY, 95,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
+            cv2.imwrite(os.path.join("data/pairs/after", out_name), a, [cv2.IMWRITE_JPEG_QUALITY, 95,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
             clean += 1
         else:
             try:
                 _, und, ncc2 = estimate_undistort(b_res, a)
                 if ncc2 >= ALIGN_OK:
-                    cv2.imwrite(dst_b, und, [cv2.IMWRITE_JPEG_QUALITY, 95])
-                    cv2.imwrite(os.path.join("data/pairs/after", out_name), a, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                    cv2.imwrite(dst_b, und, [cv2.IMWRITE_JPEG_QUALITY, 95,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
+                    cv2.imwrite(os.path.join("data/pairs/after", out_name), a, [cv2.IMWRITE_JPEG_QUALITY, 95,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
                     rescued += 1
             except Exception:
                 pass

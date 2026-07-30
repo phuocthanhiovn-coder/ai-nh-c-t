@@ -97,7 +97,7 @@ def window_mask(bgr, min_score=0.35):
     """Chi mask cua so (gop). Rong = zeros."""
     h, w = bgr.shape[:2]
     out = np.zeros((h, w), np.float32)
-    for box, score, label in detect_boxes(bgr, "window."):
+    for box, score, label in detect_boxes(bgr, "window. window frame. window sill. glass door."):
         if score >= min_score and "window" in label.lower():
             out = np.maximum(out, box_to_mask(bgr, box))
     return out

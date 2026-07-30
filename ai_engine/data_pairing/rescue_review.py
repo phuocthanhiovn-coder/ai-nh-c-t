@@ -63,7 +63,9 @@ def save_rescue_sample(before_undistorted, after_img, output_path, max_width=SAM
         canvas = cv2.resize(canvas, (int(cw * scale), int(ch * scale)), interpolation=cv2.INTER_AREA)
 
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    cv2.imwrite(output_path, canvas, [cv2.IMWRITE_JPEG_QUALITY, 95])
+    cv2.imwrite(output_path, canvas, [cv2.IMWRITE_JPEG_QUALITY, 95,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
 
 
 def run_rescue():
@@ -120,7 +122,9 @@ def run_rescue():
                 print(f"  [!] CẢNH BÁO: {filename} đã tồn tại trong data/pairs/, bỏ qua ghi đè.")
                 rescued = False
             else:
-                cv2.imwrite(dest_before, aligned_before, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                cv2.imwrite(dest_before, aligned_before, [cv2.IMWRITE_JPEG_QUALITY, 95,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
                 shutil.copy(after_path, dest_after)
                 rescued_count += 1
                 status = "RESCUED"

@@ -248,7 +248,10 @@ def align_before_after(before_img, after_img):
         warp_matrix_large[2, 0] = warp_matrix[2, 0] / s
         warp_matrix_large[2, 1] = warp_matrix[2, 1] / s
         
-        aligned_before_final = cv2.warpPerspective(aligned_before_rough, warp_matrix_large, (w, h), borderMode=cv2.BORDER_REPLICATE)
+        aligned_before_final = cv2.warpPerspective(
+            aligned_before_rough, warp_matrix_large, (w, h),
+            flags=cv2.INTER_LANCZOS4 + cv2.WARP_INVERSE_MAP,
+            borderMode=cv2.BORDER_REPLICATE)
     except cv2.error:
         # Fallback Affine
         warp_matrix_affine = np.eye(2, 3, dtype=np.float32)
@@ -447,8 +450,12 @@ def run_ingest(reset=False, before_root="data/raw/before", after_root="data/raw/
                     
                 print(f"    [✓] Căn chỉnh: {align_status} (align_score: {align_score:.4f}) | Phân loại: {edit_type} (conf: {confidence:.2f})")
                 
-                cv2.imwrite(os.path.join(dest_dir, "before", output_name), aligned_before, [cv2.IMWRITE_JPEG_QUALITY, 95])
-                cv2.imwrite(os.path.join(dest_dir, "after", output_name), after_img_resized, [cv2.IMWRITE_JPEG_QUALITY, 95])
+                cv2.imwrite(os.path.join(dest_dir, "before", output_name), aligned_before, [cv2.IMWRITE_JPEG_QUALITY, 95,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
+                cv2.imwrite(os.path.join(dest_dir, "after", output_name), after_img_resized, [cv2.IMWRITE_JPEG_QUALITY, 95,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                     cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
                 
                 if job_name:
                     sample_path = os.path.join(OUTPUTS_SAMPLES_DIR, f"sample_{job_name}_{prefix_clean}{num}.jpg")

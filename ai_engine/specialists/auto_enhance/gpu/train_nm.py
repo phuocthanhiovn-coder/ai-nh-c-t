@@ -44,7 +44,8 @@ def train_nm(cfg: dict) -> dict:
                                cache_ram=bool(cfg.get("cache_ram", True)),
                                cache_cap=int(cfg.get("cache_cap", 120)))
     val_ds = (CropPairDataset(data_dir, val_files, crop, proxy_res, is_train=False,
-                              cache_ram=True, cache_cap=40) if val_files else None)
+                              cache_ram=True,
+                              cache_cap=int(cfg.get('cache_cap', 1280))) if val_files else None)
     pin = device.type == "cuda"
     lk = dict(num_workers=num_workers, drop_last=False, pin_memory=pin)
     if num_workers > 0:

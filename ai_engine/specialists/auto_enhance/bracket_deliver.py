@@ -54,10 +54,31 @@ def _cfg_ckpt():
 
 
 def load_model(ckpt=None, device=None):
+    """Nạp checkpoint theo checkpoints/auto_enhance_config.json -> (model eval, device).
+
+    FIX 30/07 (regression tôi tự gây ra khi bỏ hardcode CH_C): CH_N.pt KHÔNG có
+    file .meta, load_cfg im lặng trả default width=16 -> load_state_dict fail 22
+    tensor -> process.py và webapp CRASH lúc khởi động. Lấy model_kwargs TRỰC TIẾP
+    từ config (nguồn sự thật duy nhất), .meta chỉ là dự phòng.
+    """
     ckpt = ckpt or _cfg_ckpt()
-    """Nạp checkpoint CH_C + cấu hình từ .meta -> (model eval, device cpu)."""
     device = device or torch.device("cpu")
-    cfg = load_cfg(ckpt + ".meta", device)
+    cfg = None
+    try:
+        import json as _json
+        import os as _os
+        _p = _os.path.abspath(_os.path.join(_os.path.dirname(__file__), "..", "..", "..",
+                                            "checkpoints", "auto_enhance_config.json"))
+        if not _os.path.exists(_p):
+            _p = "checkpoints/auto_enhance_config.json"
+        with open(_p, encoding="utf-8") as _f:
+            mk = _json.load(_f).get("model_kwargs")
+        if isinstance(mk, dict):
+            cfg = {k: int(v) for k, v in mk.items()}
+    except Exception as e:
+        print(f"[deliver] khong doc duoc model_kwargs tu config: {e}", flush=True)
+    if cfg is None:
+        cfg = load_cfg(ckpt + ".meta", device)
     model = HDRNetV2(**cfg).to(device)
     st = torch.load(ckpt, map_location=device)
     if isinstance(st, dict) and "state_dict" in st:

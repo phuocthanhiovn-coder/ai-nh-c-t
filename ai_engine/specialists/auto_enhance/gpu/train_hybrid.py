@@ -50,7 +50,8 @@ def train_hybrid(cfg: dict) -> dict:
     train_ds = CropPairDataset(data_dir, train_files, crop, proxy_res, is_train=True,
                                cache_ram=True, cache_cap=int(cfg.get("cache_cap", 120)))
     val_ds = (CropPairDataset(data_dir, val_files, crop, proxy_res, is_train=False,
-                              cache_ram=True, cache_cap=40) if val_files else None)
+                              cache_ram=True,
+                              cache_cap=int(cfg.get('cache_cap', 1280))) if val_files else None)
     lk = dict(num_workers=num_workers, drop_last=False, pin_memory=device.type == "cuda")
     if num_workers > 0:
         lk["persistent_workers"] = True
