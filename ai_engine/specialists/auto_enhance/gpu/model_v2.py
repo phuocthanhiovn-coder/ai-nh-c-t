@@ -51,11 +51,22 @@ class GuidanceMapV2(nn.Module):
         super().__init__()
         self.conv1 = nn.Conv2d(3, guidance_hidden, kernel_size=1)
         self.conv2 = nn.Conv2d(guidance_hidden, 1, kernel_size=1)
+        # ⚠️ FIX 30/07 — LOI LON NHAT DU AN: sigmoid(conv2) voi init mac dinh cho
+        # guidance ~0.5 khap noi va KHONG CO GI trong loss ep no trai ra. Do tren
+        # CH_N: guidance chi trai [0.448, 0.576] -> CHI 2/10 bac luoi duoc dung,
+        # 8 bac con lai la NHIEU CHUA TUNG TRAIN (55.296/69.120 gia tri luoi = rac).
+        # Hau qua: model KHONG THE xu vung sang va vung toi khac nhau tai cung 1 cho
+        # -> den tuyen vao ra 13-20/255 (den nhiem xam), trang tuyet doi KHONG DAT TOI
+        # (cua so khong bao gio sach) = dung 2 benh chu che 6 vong lien.
+        # Cach sua (nhu HDRNet goc): NEO guidance vao do sang, mang hoc phan hieu chinh.
+        nn.init.zeros_(self.conv2.weight)
+        nn.init.zeros_(self.conv2.bias)
 
     def forward(self, x):
-        out = F.relu(self.conv1(x))
-        out = torch.sigmoid(self.conv2(out))  # [B, 1, H, W] in [0, 1]
-        return out
+        # luma BGR (pipeline nay dung BGR xuyen suot)
+        luma = 0.114 * x[:, 0:1] + 0.587 * x[:, 1:2] + 0.299 * x[:, 2:3]
+        delta = torch.tanh(self.conv2(F.relu(self.conv1(x))))   # khoi dau = 0
+        return torch.clamp(luma + 0.5 * delta, 0.0, 1.0)
 
 
 class CoefficientPredictorV2(nn.Module):

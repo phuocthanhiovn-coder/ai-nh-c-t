@@ -206,13 +206,14 @@ class CropPairDataset(Dataset):
         before_t = torch.from_numpy(before_crop.transpose(2, 0, 1).copy()).float() / 255.0
         after_t = torch.from_numpy(after_crop.transpose(2, 0, 1).copy()).float() / 255.0
 
-        # PROXY DUNG CA ANH, khong phai tu mieng crop (fix 30/07).
-        # Truoc day proxy dung tu crop 512 -> nhanh toan cuc cua model chi thay 1
-        # mieng tuong khi hoc, nhung luc chay that lai nhan CA PHONG => lech phan
-        # phoi hoan toan. NMNet quang cao "cho model nhin ca phong" ma khi train
-        # chua bao gio duoc nhin ca phong.
-        proxy_src = torch.from_numpy(proxy_src_img.transpose(2, 0, 1).copy()).float() / 255.0
-        proxy_t = HDRNetV2.make_proxy(proxy_src, self.proxy_res).squeeze(0)
+        # PROXY TU MIENG CROP (hoan nguyen 30/07 toi, sau khi DO A/B co doi chung).
+        # Toi da doi sang "proxy tu ca anh" tuong la sua loi -> hoa ra lam chat luong
+        # LUC GIAO HANG TE DI 41.9% (deploy L1 0.0255 -> 0.0362, 2 seed): luoi bilateral
+        # danh chi so theo toa do MIENG CROP, nen o luoi tinh tu vi tri (i,j) cua CA
+        # PHONG lai duoc ap vao vi tri (i,j) cua mieng crop = mot cho hoan toan khac.
+        # Muon cho model "nhin ca phong" thi phai truyen toa do crop vao slice_grid,
+        # KHONG phai doi nguon proxy.
+        proxy_t = HDRNetV2.make_proxy(before_t, self.proxy_res).squeeze(0)
         return before_t, proxy_t, after_t
 
 

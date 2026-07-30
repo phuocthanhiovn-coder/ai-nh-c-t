@@ -135,9 +135,14 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     # anh 6024px => mau canh ngoai to len TUONG canh cua so ("cua so nhu tranh ve"),
     # cong thuc go to len vat khac ("do vat cai sang cai toi").
     if d0["scene"] in ("interior", "exterior_ground", "general"):
-        out = R["straighten"]["fn"](out, {"strength": 1.0})
-        img = R["straighten"]["fn"](img, {"strength": 1.0})   # nguon 'before' cung hinh hoc
-        record["steps"].append({"op": "straighten(dau chuoi)", "reason": f"scene={d0['scene']}"})
+        # FIX 30/07 (dot 2): tinh hinh hoc MOT LAN tren anh GOC roi ap cho ca hai.
+        # Goi apply() 2 lan lam analyze() do duong thang tren 2 anh khac tong mau ->
+        # 2 goc khac nhau (dich toi 445px, co ca ca 1 ben xoay 1 ben khong).
+        from ai_engine.specialists.straighten.straighten import apply as _st
+        img, _H = _st(img, {"strength": 1.0, "return_h": True})
+        out = _st(out, {"strength": 1.0, "h_override": _H}) if _H is not None else out
+        record["steps"].append({"op": "straighten(dau chuoi, H dung chung)",
+                                "reason": f"scene={d0['scene']}", "applied": _H is not None})
     _before_u8 = (np.clip(img, 0, 1) * 255).astype(np.uint8)
     win_mask_gsam = get_window_mask(_before_u8)
     if win_mask_gsam is not None:

@@ -79,7 +79,10 @@ def dark_fidelity(pred, target, thresh=0.28, l_weight=1.0, ab_weight=1.5):
     lab_t = bgr_to_lab(target)
     dl = (lab_p[:, 0:1] - lab_t[:, 0:1]).abs() * l_weight
     dab = (lab_p[:, 1:3] - lab_t[:, 1:3]).abs().mean(dim=1, keepdim=True) * ab_weight
-    return ((dl + dab) / 100.0 * w).mean()
+    # FIX 30/07 (dot 2 — lan dau regex khong khop nen sot): .mean() chia cho TOAN BO
+    # pixel trong khi w chi phu 0.5-17% -> term giu-den-sau bi loang 6-218 lan, chi
+    # con 0.2% gradient. Chuan hoa theo tong trong so (do: |grad| tang 17.8 lan).
+    return (((dl + dab) / 100.0) * w).sum() / (w.sum() + 1e-6)
 
 
 # ---------------------------------------------------------------------------

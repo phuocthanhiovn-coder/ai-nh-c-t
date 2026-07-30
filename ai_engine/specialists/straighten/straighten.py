@@ -259,15 +259,28 @@ def apply(img, params=None):
     strength = min(max(strength, 0.0), 1.0)
     k1 = float(params.get("k1", 0.0))
 
+    # FIX 30/07: cho phep TAI SU DUNG hinh hoc. Truoc day brain/run.py goi apply()
+    # rieng cho `out` (da qua model) va `img` (goc) -> analyze() do duong thang tren
+    # 2 anh khac tong mau -> 2 goc khac nhau, dich toi 445 PIXEL, co ca truong hop
+    # 1 ben xoay 1 ben khong => mask lai lech dung nhu loi da dinh sua.
+    return_h = bool(params.get("return_h", False))
+    h_override = params.get("h_override")
+
     h, w = img.shape[:2]
     working = img
     if k1 != 0.0:
         working = undistort_k1(img, k1)
 
+    if h_override is not None:
+        res = cv2.warpPerspective(
+            working.astype(np.float32, copy=False), np.asarray(h_override, np.float64),
+            (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+        return (res, h_override) if return_h else res
+
     diag = analyze(working)
 
     if not diag["applied"] or strength <= 0.0:
-        return working.copy()
+        return (working.copy(), None) if return_h else working.copy()
 
     H_base = diag["H_small"]
     scale = diag["scale"]
@@ -288,7 +301,7 @@ def apply(img, params=None):
             break
         s *= COVER_STRENGTH_DECAY
     else:
-        return working.copy()
+        return (working.copy(), None) if return_h else working.copy()
 
     if z > 1.0:
         cx, cy = w / 2.0, h / 2.0
@@ -304,7 +317,7 @@ def apply(img, params=None):
         flags=cv2.INTER_LANCZOS4,
         borderMode=cv2.BORDER_REPLICATE,
     )
-    return result
+    return (result, H_full) if return_h else result
 
 
 # ---------------------------------------------------------------------------
