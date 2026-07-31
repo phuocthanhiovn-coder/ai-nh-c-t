@@ -66,7 +66,8 @@ SWEEP_CSV_DIR = os.path.join("outputs", "sweep")
 DEFAULT_VAL_FRAC = 0.12
 
 # Keys HDRNetV2.__init__ accepts, so we can hand it exactly cfg's model knobs.
-_MODEL_KEYS = ("grid_bins", "grid_size", "proxy_res", "width", "guidance_hidden")
+_MODEL_KEYS = ("grid_bins", "grid_size", "proxy_res", "width", "guidance_hidden",
+               "guidance")
 
 
 # ---------------------------------------------------------------------------

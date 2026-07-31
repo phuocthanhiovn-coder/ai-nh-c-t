@@ -31,3 +31,9 @@ tools/
 CLAUDE.md
 GEMINI.md
 test_cr3.py
+
+# 31/07: chan tuyet doi anh khach + repo ngoai (ra soat vong 6: 769 file chua theo doi,
+# 1 lenh git add -A la len repo CONG KHAI)
+data_train_*/
+external/
+data_*/

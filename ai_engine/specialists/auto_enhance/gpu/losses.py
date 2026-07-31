@@ -58,7 +58,10 @@ def highlight_protection(pred, target, gamma=2.0):
     w = luma.clamp(0.0, 1.0) ** gamma                      # emphasize highlights
     # FIX 30/07: .mean() chia cho TOAN BO pixel trong khi w gan 0 khap noi ->
     # term chong chay sang chi con 0.26% gradient. Chuan hoa theo tong trong so.
-    return (over * w).sum() / (w.sum() + 1e-6)
+    # B7: over co 3 kenh, w chi 1 kenh -> chia w.sum() lam term manh GAP 3 LAN so voi
+    # danh nghia (do duoc dung 3.0x). B5: san mau so chong gradient vo han.
+    denom = torch.clamp(3.0 * w.sum(), min=0.06 * w.numel())
+    return (over * w).sum() / denom
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +85,10 @@ def dark_fidelity(pred, target, thresh=0.28, l_weight=1.0, ab_weight=1.5):
     # FIX 30/07 (dot 2 — lan dau regex khong khop nen sot): .mean() chia cho TOAN BO
     # pixel trong khi w chi phu 0.5-17% -> term giu-den-sau bi loang 6-218 lan, chi
     # con 0.2% gradient. Chuan hoa theo tong trong so (do: |grad| tang 17.8 lan).
-    return (((dl + dab) / 100.0) * w).sum() / (w.sum() + 1e-6)
+    # B5 (ra soat vong 6): w.sum() do duoc thap nhat 0.26 tren 534 crop that ->
+    # gradient/pixel gap 967.450 lan L1. San mau so o muc 2% dien tich.
+    denom = torch.clamp(w.sum(), min=0.02 * w.numel())
+    return (((dl + dab) / 100.0) * w).sum() / denom
 
 
 # ---------------------------------------------------------------------------

@@ -47,26 +47,36 @@ class GuidanceMapV2(nn.Module):
     """1-channel [0,1] guidance map from a full-res 3-channel image via two 1x1
     convs. guidance_hidden sets the hidden width."""
 
-    def __init__(self, guidance_hidden=16):
+    def __init__(self, guidance_hidden=16, guidance="sigmoid"):
+        """guidance:
+          "sigmoid" — CONG THUC CU. BAT BUOC cho moi checkpoint train truoc 31/07
+              (CH_C..CH_N). Nhuoc diem da do: guidance chi trai [0.448, 0.576]
+              -> chi 2/10 bac luoi song, 8 bac con lai la nhieu chua train.
+          "luma"    — CONG THUC MOI (neo vao do sang nhu HDRNet goc): guidance trai
+              gan tron [0,1] -> dung du 10/10 bac. CHI cho checkpoint TRAIN MOI.
+
+        ⚠️ BAI HOC 31/07 (ra soat vong 5): doi thang cong thuc trong code lam
+        CH_N.pt (train voi sigmoid) chay bang cong thuc luma -> hinh dang tham so
+        GIONG NHAU nen load_state_dict KHONG BAO LOI, nhung anh giao ra TE HON 350%
+        (L1 0.077 -> 0.347). Cong thuc PHAI la tham so gan lien checkpoint.
+        """
         super().__init__()
+        if guidance not in ("sigmoid", "luma"):
+            raise ValueError(f"guidance khong hop le: {guidance}")
+        self.guidance = guidance
         self.conv1 = nn.Conv2d(3, guidance_hidden, kernel_size=1)
         self.conv2 = nn.Conv2d(guidance_hidden, 1, kernel_size=1)
-        # ⚠️ FIX 30/07 — LOI LON NHAT DU AN: sigmoid(conv2) voi init mac dinh cho
-        # guidance ~0.5 khap noi va KHONG CO GI trong loss ep no trai ra. Do tren
-        # CH_N: guidance chi trai [0.448, 0.576] -> CHI 2/10 bac luoi duoc dung,
-        # 8 bac con lai la NHIEU CHUA TUNG TRAIN (55.296/69.120 gia tri luoi = rac).
-        # Hau qua: model KHONG THE xu vung sang va vung toi khac nhau tai cung 1 cho
-        # -> den tuyen vao ra 13-20/255 (den nhiem xam), trang tuyet doi KHONG DAT TOI
-        # (cua so khong bao gio sach) = dung 2 benh chu che 6 vong lien.
-        # Cach sua (nhu HDRNet goc): NEO guidance vao do sang, mang hoc phan hieu chinh.
-        nn.init.zeros_(self.conv2.weight)
-        nn.init.zeros_(self.conv2.bias)
+        if guidance == "luma":
+            nn.init.zeros_(self.conv2.weight)
+            nn.init.zeros_(self.conv2.bias)
 
     def forward(self, x):
-        # luma BGR (pipeline nay dung BGR xuyen suot)
+        h = self.conv2(F.relu(self.conv1(x)))
+        if self.guidance == "sigmoid":
+            return torch.sigmoid(h)
         luma = 0.114 * x[:, 0:1] + 0.587 * x[:, 1:2] + 0.299 * x[:, 2:3]
-        delta = torch.tanh(self.conv2(F.relu(self.conv1(x))))   # khoi dau = 0
-        return torch.clamp(luma + 0.5 * delta, 0.0, 1.0)
+        g = luma + 0.5 * torch.tanh(h)
+        return g + (g.clamp(0.0, 1.0) - g).detach()      # straight-through clamp
 
 
 class CoefficientPredictorV2(nn.Module):
@@ -156,7 +166,8 @@ class HDRNetV2(nn.Module):
     on the proxy, slices it differentiably with the full-res guidance map, and
     applies a per-pixel 3x4 affine to the full-res input. Operator-not-pixel."""
 
-    def __init__(self, grid_bins=8, grid_size=16, proxy_res=256, width=16, guidance_hidden=16):
+    def __init__(self, grid_bins=8, grid_size=16, proxy_res=256, width=16, guidance_hidden=16,
+                 guidance="sigmoid"):
         super().__init__()
         self.grid_bins = grid_bins
         self.grid_size = grid_size
@@ -167,7 +178,8 @@ class HDRNetV2(nn.Module):
         self.predictor = CoefficientPredictorV2(
             grid_bins=grid_bins, grid_size=grid_size, proxy_res=proxy_res, width=width
         )
-        self.guidance_net = GuidanceMapV2(guidance_hidden=guidance_hidden)
+        self.guidance_mode = guidance
+        self.guidance_net = GuidanceMapV2(guidance_hidden=guidance_hidden, guidance=guidance)
 
     @staticmethod
     def make_proxy(full_bgr_tensor, proxy_res):
