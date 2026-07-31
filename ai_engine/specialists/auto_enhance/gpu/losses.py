@@ -140,7 +140,7 @@ _LAP_K = torch.tensor([[0., 1., 0.], [1., -4., 1.], [0., 1., 0.]]).view(1, 1, 3,
 
 
 
-def sharp_tile_loss(pred, target, tiles=8):
+def sharp_tile_loss(pred, target, tiles=8, w_flat=2.0):
     """DO NET THEO VUNG (31/07) — lo hong GOC cua 15 doi model.
 
     Do duoc: pipeline lam GIAM net 30% (150->103) trong khi AutoHDR TANG gap 6 lan
@@ -151,12 +151,40 @@ def sharp_tile_loss(pred, target, tiles=8):
     Khac local_contrast cu: (a) theo O 8x8 chu khong phai 1 so cho ca anh -> khong
     the bu bang cach lam net mot goc; (b) CHI phat mot chieu (mem hon target),
     KHONG bao gio keo nguoc khi anh da net hon -> khong the lam mo anh.
+
+    BAN VA 31/07 (luat L10) — ban dau CHI co ve thuong o tren, va NAF_FT5 da LACH:
+    do net 1176 vs AutoHDR 619, nhung soi 100% thi do la LUOI SAN phu bau troi va
+    tuong phang. Rac nhieu tan so cao re hon nhieu so voi dung canh that, ma
+    Laplacian khong phan biet duoc hai thu. Nay tach lam 2 ve theo VUNG cua anh
+    DICH:
+      - vung CO CANH THAT  -> thuong net (nhu cu), o day nhieu khong an diem duoc
+        vi da co san nang luong cao.
+      - vung PHANG (troi, tuong) -> PHAT nang luong cao tan vuot qua anh dich.
+        Day chinh la duong lach cu, gio thanh duong lo.
+    w_flat=2.0: phat nang hon thuong de model khong "danh doi" san lay diem net.
     """
     k = _LAP_K.to(pred.dtype).to(pred.device)
-    def energy(x):
+
+    def lap(x):
         y = 0.114 * x[:, 0:1] + 0.587 * x[:, 1:2] + 0.299 * x[:, 2:3]
-        return F.adaptive_avg_pool2d(F.conv2d(y, k, padding=1).abs(), tiles)
-    return F.relu(energy(target) - energy(pred)).mean()
+        return F.conv2d(y, k, padding=1).abs()
+
+    lp, lt = lap(pred), lap(target)
+    # "phang hay khong" doc tu anh DICH (khong doc tu pred — neu doc tu pred thi
+    # model chi viec lam nhieu khap noi de tu tuyen bo "cho nao cung la canh").
+    soft_t = F.avg_pool2d(lt, 9, stride=1, padding=4)
+    thr = soft_t.mean(dim=(1, 2, 3), keepdim=True)
+    edge_m = (soft_t >= thr).to(lt.dtype).detach()
+    flat_m = 1.0 - edge_m
+
+    # ve 1 — thuong net, chi tinh tren vung canh that, gop theo o cho on dinh
+    ep = F.adaptive_avg_pool2d(lp * edge_m, tiles)
+    et = F.adaptive_avg_pool2d(lt * edge_m, tiles)
+    under = F.relu(et - ep).mean()
+
+    # ve 2 — phat san: vung phang ma pred cao tan hon target
+    over = (F.relu(lp - lt) * flat_m).sum() / flat_m.sum().clamp(min=1.0)
+    return under + w_flat * over
 
 
 def local_contrast_loss(pred, target):
