@@ -116,7 +116,47 @@ def colorfulness_loss(pred, target):
     return under + 0.25 * track
 
 
+
+# ---------------------------------------------------------------------------
+# CHROMA THEO VUNG (31/07) — thay colorfulness_loss da bi TAT.
+# Chu cham 0/10: "anh bac, mat mau". Nguyen nhan: tat w_color -> khong con gi
+# ngan model lam nhat mau, ma L1+Lab ve ban chat la "doan trung binh" = xam.
+# Loss cu co 2 loi (thuong am mau toan anh; keo NGUOC khi anh da du dam) nen phai
+# SUA chu khong phai bo:
+#   - tinh theo O 8x8 -> khong the "bu" bang cach lam dam mot goc
+#   - dung chroma Lab (khong phai rg/yb) -> am mau toan anh KHONG duoc thuong
+#   - CHI phat mot chieu (nhat hon target), khong keo nguoc
+# ---------------------------------------------------------------------------
+def chroma_tile_loss(pred, target, tiles=8):
+    lab_p = bgr_to_lab(pred)
+    lab_t = bgr_to_lab(target)
+    cp = torch.sqrt(lab_p[:, 1:2] ** 2 + lab_p[:, 2:3] ** 2 + 1e-6)
+    ct = torch.sqrt(lab_t[:, 1:2] ** 2 + lab_t[:, 2:3] ** 2 + 1e-6)
+    mp = F.adaptive_avg_pool2d(cp, tiles)
+    mt = F.adaptive_avg_pool2d(ct, tiles)
+    return F.relu(mt - mp).mean() / 100.0
+
 _LAP_K = torch.tensor([[0., 1., 0.], [1., -4., 1.], [0., 1., 0.]]).view(1, 1, 3, 3)
+
+
+
+def sharp_tile_loss(pred, target, tiles=8):
+    """DO NET THEO VUNG (31/07) — lo hong GOC cua 15 doi model.
+
+    Do duoc: pipeline lam GIAM net 30% (150->103) trong khi AutoHDR TANG gap 6 lan
+    (150->893). Ly do: loss KHONG HE do do net (local_contrast cu bi bo vi co loi
+    keo anh ve mo, chua thay bang gi), trong khi co 3 nguon lam mem (khu nhieu,
+    warp, model). => model khong co ly do gi de giu net.
+
+    Khac local_contrast cu: (a) theo O 8x8 chu khong phai 1 so cho ca anh -> khong
+    the bu bang cach lam net mot goc; (b) CHI phat mot chieu (mem hon target),
+    KHONG bao gio keo nguoc khi anh da net hon -> khong the lam mo anh.
+    """
+    k = _LAP_K.to(pred.dtype).to(pred.device)
+    def energy(x):
+        y = 0.114 * x[:, 0:1] + 0.587 * x[:, 1:2] + 0.299 * x[:, 2:3]
+        return F.adaptive_avg_pool2d(F.conv2d(y, k, padding=1).abs(), tiles)
+    return F.relu(energy(target) - energy(pred)).mean()
 
 
 def local_contrast_loss(pred, target):
@@ -260,7 +300,11 @@ class VGGPerceptual(nn.Module):
     def _prep(self, img_bgr):
         # BGR -> RGB, then ImageNet normalize.
         rgb = img_bgr.flip(1)
-        return (rgb - self.mean) / self.std
+        # FIX 31/07: mean/std la tensor thuong -> .to(device) cua Module KHONG doi
+        # chung -> RuntimeError khi train tren GPU. Ep ve dung thiet bi cua input.
+        m = self.mean.to(device=rgb.device, dtype=rgb.dtype)
+        sd = self.std.to(device=rgb.device, dtype=rgb.dtype)
+        return (rgb - m) / sd
 
     def forward(self, pred, target):
         if self.slices is None:
@@ -292,7 +336,7 @@ class CombinedLoss(nn.Module):
 
     def __init__(self, w_l1=1.0, w_char=0.0, w_lab=0.0, w_perc=0.0,
                  lab_weights=(1.0, 1.0, 1.0), w_hi=0.0, hi_gamma=2.0,
-                 w_dark=0.0, dark_thresh=0.28, w_color=0.0, w_lc=0.0):
+                 w_dark=0.0, dark_thresh=0.28, w_color=0.0, w_lc=0.0, w_chroma=0.0, w_sharp=0.0):
         super().__init__()
         self.w_l1 = float(w_l1)
         self.w_char = float(w_char)
@@ -304,6 +348,8 @@ class CombinedLoss(nn.Module):
         self.dark_thresh = float(dark_thresh)
         self.w_color = float(w_color)
         self.w_lc = float(w_lc)
+        self.w_chroma = float(w_chroma)
+        self.w_sharp = float(w_sharp)
 
         self.lab = LabLoss(*lab_weights) if self.w_lab != 0.0 else None
         self.perc = VGGPerceptual() if self.w_perc != 0.0 else None
@@ -351,6 +397,19 @@ class CombinedLoss(nn.Module):
             lc = local_contrast_loss(pred, target)
             terms["lc"] = self.w_lc * lc
             total = total + terms["lc"]
+
+        if self.w_chroma > 0:
+
+            ch = chroma_tile_loss(pred, target)
+
+            total = total + self.w_chroma * ch
+
+            terms["chroma"] = self.w_chroma * float(ch.detach())
+        if self.w_sharp > 0:
+            sh = sharp_tile_loss(pred, target)
+            total = total + self.w_sharp * sh
+            terms["sharp"] = self.w_sharp * float(sh.detach())
+
 
         terms["total"] = total
         return total, terms
