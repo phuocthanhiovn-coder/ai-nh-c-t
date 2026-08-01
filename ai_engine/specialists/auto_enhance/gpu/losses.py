@@ -136,6 +136,27 @@ def chroma_tile_loss(pred, target, tiles=8):
     mt = F.adaptive_avg_pool2d(ct, tiles)
     return F.relu(mt - mp).mean() / 100.0
 
+def clip_loss(pred, target, hi=0.96, lo=0.02):
+    """PHAT RIENG viec DANG TRANG / BET DEN (01/08).
+
+    Vi sao can rieng, khong dung highlight_protection: cong thuc do phat
+    relu(pred - target) co trong so luma^2, tuc la phat MOI lan sang hon anh dich
+    o vung sang. Voi w_hi=3.0 (FT5) no tao ra do lech mot chieu: vuot len tren
+    ton 1 + 3*w, tut xuong duoi chi ton 1 -> diem toi uu bi keo XUONG DUOI anh
+    dich. Do duoc tren FT5: chay trang ve 0.00% (AutoHDR 0.11%) nhung ANH TOI OM,
+    am nau — dung loi chu che.
+
+    Term nay chi kich hoat khi pred CHAM tran (>=hi) hoac CHAM day (<=lo) trong
+    khi anh dich VAN CON chi tiet o do. Vung trung gian: gradient bang 0 tuyet
+    doi -> khong the lam toi anh. Chia cho (1-hi) de dua ve thang [0,1].
+    """
+    m_hi = (target < hi).to(pred.dtype)
+    m_lo = (target > lo).to(pred.dtype)
+    blown = (torch.relu(pred - hi) / (1.0 - hi)) * m_hi
+    crush = (torch.relu(lo - pred) / max(lo, 1e-6)) * m_lo
+    return blown.mean() + crush.mean()
+
+
 _LAP_K = torch.tensor([[0., 1., 0.], [1., -4., 1.], [0., 1., 0.]]).view(1, 1, 3, 3)
 
 
@@ -364,7 +385,8 @@ class CombinedLoss(nn.Module):
 
     def __init__(self, w_l1=1.0, w_char=0.0, w_lab=0.0, w_perc=0.0,
                  lab_weights=(1.0, 1.0, 1.0), w_hi=0.0, hi_gamma=2.0,
-                 w_dark=0.0, dark_thresh=0.28, w_color=0.0, w_lc=0.0, w_chroma=0.0, w_sharp=0.0):
+                 w_dark=0.0, dark_thresh=0.28, w_color=0.0, w_lc=0.0, w_chroma=0.0, w_sharp=0.0,
+                 w_clip=0.0):
         super().__init__()
         self.w_l1 = float(w_l1)
         self.w_char = float(w_char)
@@ -378,6 +400,7 @@ class CombinedLoss(nn.Module):
         self.w_lc = float(w_lc)
         self.w_chroma = float(w_chroma)
         self.w_sharp = float(w_sharp)
+        self.w_clip = float(w_clip)
 
         self.lab = LabLoss(*lab_weights) if self.w_lab != 0.0 else None
         self.perc = VGGPerceptual() if self.w_perc != 0.0 else None
@@ -415,6 +438,11 @@ class CombinedLoss(nn.Module):
             dk = dark_fidelity(pred, target, self.dark_thresh)
             terms["dark"] = self.w_dark * dk
             total = total + terms["dark"]
+
+        if self.w_clip != 0.0:
+            cl = clip_loss(pred, target)
+            terms["clip"] = self.w_clip * cl
+            total = total + terms["clip"]
 
         if self.w_color != 0.0:
             col = colorfulness_loss(pred, target)
