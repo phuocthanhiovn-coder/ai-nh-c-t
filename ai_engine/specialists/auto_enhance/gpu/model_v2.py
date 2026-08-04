@@ -178,6 +178,20 @@ class HDRNetV2(nn.Module):
         self.predictor = CoefficientPredictorV2(
             grid_bins=grid_bins, grid_size=grid_size, proxy_res=proxy_res, width=width
         )
+        # ⚠️ 04/08 (ra soat vong 7) — "NAP CHEO IM LANG": doc truoc khi doi `guidance`.
+        # Hai cong thuc ('sigmoid' cu / 'luma' moi) KHONG doi hinh dang tham so nao,
+        # nen `load_state_dict(strict=True)` cua checkpoint train bang cong thuc nay
+        # vao model dung cong thuc kia THANH CONG — missing=0, unexpected=0, khong mot
+        # canh bao. Do thu: nap CH_N (train bang 'sigmoid') vao model dung 'luma' cho
+        # L1 0.2459 thay vi 0.0546, tuc TE HON 4.5 LAN, lech 52.77/255.
+        # Hien tai an toan NHO MAC DINH: guidance='sigmoid' dung voi CH_C..CH_N, va
+        # auto_enhance_config.json khong ghi khoa nay nen luon lay mac dinh.
+        # Rui ro con lai: ai do ghi `"guidance": "luma"` vao model_kwargs de thu
+        # nghiem roi quen bo ra -> ban dang ban chay sai cong thuc trong im lang.
+        # KHONG chan bang cach them buffer vao state_dict: lam vay se pha
+        # load_state_dict cua MOI checkpoint da co (11 file trong checkpoints/gpu/,
+        # ke ca CH_N.pt dang ban) — chua mot rui ro bang mot su co chac chan.
+        # Thay vao do `ops_basic._load_auto_enhance` IN RA che do dang dung moi lan nap.
         self.guidance_mode = guidance
         self.guidance_net = GuidanceMapV2(guidance_hidden=guidance_hidden, guidance=guidance)
 

@@ -134,7 +134,14 @@ def chroma_tile_loss(pred, target, tiles=8):
     ct = torch.sqrt(lab_t[:, 1:2] ** 2 + lab_t[:, 2:3] ** 2 + 1e-6)
     mp = F.adaptive_avg_pool2d(cp, tiles)
     mt = F.adaptive_avg_pool2d(ct, tiles)
-    return F.relu(mt - mp).mean() / 100.0
+    # ⭐ 04/08 (ra soat vong 7) — THEM VE BAM NGUOC (nhe).
+    # Ban cu chi `relu(mt - mp)`, tuc phat MOT CHIEU tuyet doi: chi phat khi pred NHAT
+    # hon target. Do that: anh qua bao hoa GAP BA LAN target van cham 0.000000 — loss
+    # nay hoan toan mu truoc viec over-cook mau, dung tat ma chu che nhieu vong
+    # ("mau khong tu nhien", "neon").
+    # Giu bat doi xung (day toi target manh hon la keo lui) nhung khong con mu: he so
+    # 0.25 cho chieu nguoc, cung ti le ma colorfulness_loss dang dung.
+    return (F.relu(mt - mp).mean() + 0.25 * F.relu(mp - mt).mean()) / 100.0
 
 def clip_loss(pred, target, hi=0.96, lo=0.02):
     """PHAT RIENG viec DANG TRANG / BET DEN (01/08).
@@ -201,7 +208,14 @@ def sharp_tile_loss(pred, target, tiles=8, w_flat=2.0):
     # ve 1 — thuong net, chi tinh tren vung canh that, gop theo o cho on dinh
     ep = F.adaptive_avg_pool2d(lp * edge_m, tiles)
     et = F.adaptive_avg_pool2d(lt * edge_m, tiles)
-    under = F.relu(et - ep).mean()
+    # ⭐ 04/08 (ra soat vong 7) — PHAT CA CHIEU VUOT MUC TRONG VUNG CANH.
+    # Ban cu chi `relu(et - ep)`, tuc chi phat khi pred KEM net hon target trong vung
+    # canh. Ve chong-san (`over`) chi gac vung PHANG. Nen rac nhieu rai DUNG TRONG
+    # VUNG CANH van lot: no lam `ep` tang (thoat ve 1) ma khong cham ve 2.
+    # Nay bam nhe chieu vuot muc ngay trong vung canh de "them nang luong bua" khong
+    # con la duong lach. He so 0.25 giu tinh bat doi xung (uu tien chua MO hon la
+    # chua QUA TAY), dung ti le voi chroma_tile_loss.
+    under = F.relu(et - ep).mean() + 0.25 * F.relu(ep - et).mean()
 
     # ve 2 — phat san: vung phang ma pred cao tan hon target
     # ⭐ 04/08 (ra soat vong 7) — EP FP32 TRUOC KHI CONG DON.

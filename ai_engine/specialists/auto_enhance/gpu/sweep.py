@@ -282,6 +282,7 @@ def run(args, train_fn=None):
           f"(smoke={args.smoke})")
 
     results = []
+    _loi_configs = []          # 04/08: dem cau hinh CHAY HONG, xem khoi except ben duoi
     for i, raw in enumerate(configs, start=1):
         elapsed = time.monotonic() - t0
         if elapsed >= budget_s:
@@ -298,12 +299,32 @@ def run(args, train_fn=None):
         try:
             best_val, ckpt_path, seconds = _train_measured(cfg, train_fn)
         except Exception as e:
-            print(f"[!] Config '{cfg['name']}' LOI, bo qua: {e!r}")
+            # ⭐ 04/08 (ra soat vong 7) — DEM va NEM, khong bo qua im lang.
+            # Ban cu `continue` khien mot loi CO HE THONG (vd sai ten khoa loss) lam
+            # CA 16 cau hinh cung nem o dong dau tien, nhung sweep van chay het roi in
+            # ra mot leaderboard RONG nhu the day la ket qua that. Nguoi doc ket luan
+            # "khong cau hinh nao thang" trong khi thuc te khong cau hinh nao CHAY.
+            print(f"[!] Config '{cfg['name']}' LOI: {e!r}", flush=True)
+            _loi_configs.append(cfg["name"])
             continue
 
         print(f"    -> best_val={best_val:.6f}  ckpt={ckpt_path}  ({seconds:.1f}s)")
         results.append({"cfg": cfg, "best_val": best_val,
                         "ckpt_path": ckpt_path, "seconds": seconds})
+
+    # ⭐ 04/08 (ra soat vong 7) — TAT CA HONG thi phai NEM, khong duoc in bang rong.
+    # Do la truong hop da xay ra that: ca 16 cau hinh nem ValueError o dong dau vi mot
+    # loi ten khoa loss, nhung sweep chay het roi ket thuc "binh thuong" — nen ma thoat
+    # van la 0 va moi launcher goi no deu tuong la da chay xong mot dot sweep.
+    if _loi_configs and not results:
+        raise RuntimeError(
+            f"TAT CA {len(_loi_configs)} cau hinh deu LOI: {_loi_configs[:5]}"
+            f"{'...' if len(_loi_configs) > 5 else ''}. Day gan nhu chac chan la mot loi "
+            f"CO HE THONG (sai ten khoa/tham so), khong phai 16 loi rieng le."
+        )
+    if _loi_configs:
+        print(f"[!] {len(_loi_configs)}/{len(configs)} cau hinh LOI: {_loi_configs}",
+              flush=True)
 
     if not results:
         print("[!] Khong config nao chay xong — khong co leaderboard.")

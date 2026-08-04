@@ -40,12 +40,20 @@ def train_nm(cfg: dict) -> dict:
 
     train_files, val_files = split_filenames(data_dir, val_frac)
     print(f"[NM] {len(train_files)} train / {len(val_files)} val")
+    # ⭐ 04/08 (ra soat vong 7) — MOT mac dinh, khong phai HAI.
+    # Ban cu doc `cache_cap` hai lan trong cung mot ham voi hai mac dinh KHAC NHAU:
+    # 120 cho tap train va 1280 cho tap val. Neu launcher khong ghi khoa nay thi tap
+    # TRAIN bi cap 120px (anh bi thu ve 120px roi phong nguoc len crop 512 — dung loi
+    # "train tren anh 45x45" ghi o train_sweep.py:122) trong khi tap VAL van 1280px,
+    # tuc train va val chay tren hai the gioi khac nhau va val loss thanh vo nghia.
+    # Nay doc MOT LAN, dung 1280 (mac dinh cua train_sweep) cho ca hai.
+    _cache_cap = int(cfg.get("cache_cap", 1280))
     train_ds = CropPairDataset(data_dir, train_files, crop, proxy_res, is_train=True,
                                cache_ram=bool(cfg.get("cache_ram", True)),
-                               cache_cap=int(cfg.get("cache_cap", 120)))
+                               cache_cap=_cache_cap)
     val_ds = (CropPairDataset(data_dir, val_files, crop, proxy_res, is_train=False,
                               cache_ram=True,
-                              cache_cap=int(cfg.get('cache_cap', 1280))) if val_files else None)
+                              cache_cap=_cache_cap) if val_files else None)
     pin = device.type == "cuda"
     lk = dict(num_workers=num_workers, drop_last=False, pin_memory=pin)
     if num_workers > 0:

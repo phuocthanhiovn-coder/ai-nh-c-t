@@ -18,6 +18,18 @@ from .train_sweep import (CropPairDataset, SWEEP_CSV_DIR, _run_epoch,
 
 
 def train_lut(cfg: dict) -> dict:
+    # ⭐ 04/08 (ra soat vong 7) — GIEO SEED. train_nm.py da gieo tu 31/07 nhung
+    # train_lut thi khong (luat L16: ban va dung, ap thieu nhanh). Khong gieo thi hai
+    # lan chay CUNG cau hinh cho hai ket qua khac nhau, tuc moi phep A/B "mot bien"
+    # tren dong LUT deu khong tai lap duoc — khong the biet chenh lech den tu bien
+    # dang thu hay tu may man khoi tao/xao tron.
+    import random as _random
+    _seed = int(cfg.get("seed", 42))
+    _random.seed(_seed)
+    np.random.seed(_seed)
+    torch.manual_seed(_seed)
+    torch.cuda.manual_seed_all(_seed)
+
     device = torch.device(cfg.get("device", "cuda") if torch.cuda.is_available() else "cpu")
     data_dir = cfg["data_dir"]
     crop = int(cfg.get("crop", 512))

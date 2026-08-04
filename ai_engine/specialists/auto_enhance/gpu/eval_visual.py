@@ -83,7 +83,11 @@ def infer_model_cfg(ckpt_path, device):
 
     # Candidate namespaces to search, most specific last so they win.
     candidates = [meta]
-    for nest in ("args", "config", "model_config", "model", "hparams"):
+    # 04/08 (ra soat vong 7): them "model_kwargs" — dung khoa ma
+    # checkpoints/auto_enhance_config.json VA train_sweep dang ghi. Thieu no thi ham
+    # nay khong tim thay kien truc trong .meta va roi ve defaults, nen 0/3 checkpoint
+    # nap duoc (kich thuoc tensor khong khop).
+    for nest in ("args", "config", "model_config", "model", "hparams", "model_kwargs"):
         sub = meta.get(nest)
         if isinstance(sub, dict):
             candidates.append(sub)

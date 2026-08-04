@@ -176,7 +176,12 @@ cmp.addEventListener('touchmove', posFromEvent);
 
 def _to_data_url(bgr):
     """Ảnh BGR uint8 -> data URL JPEG q95."""
-    ok, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, JPEG_Q])
+    # 04/08 (ra soat vong 7): giu chroma 4:4:4. Mac dinh OpenCV la 4:2:0, tuc anh chu
+    # NHIN de duyet da mat mot nua do phan giai mau so voi anh se giao khach —
+    # duyet mot dang, giao mot dang khac.
+    ok, buf = cv2.imencode(".jpg", bgr, [cv2.IMWRITE_JPEG_QUALITY, JPEG_Q,
+                                         cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                                         cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
     if not ok:
         raise RuntimeError("Encode JPEG thất bại")
     return "data:image/jpeg;base64," + base64.b64encode(buf.tobytes()).decode("ascii")

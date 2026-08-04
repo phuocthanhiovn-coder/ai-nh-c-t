@@ -196,6 +196,14 @@ def _load_auto_enhance():
 
         model = HDRNet().to(device)
 
+    # 04/08 (ra soat vong 7) — NOI RA che do guidance dang dung.
+    # `guidance` la tham so "nap cheo im lang": doi no khong doi hinh dang tensor nao
+    # nen load_state_dict khong the phat hien khong khop. Nap CH_N (train 'sigmoid')
+    # vao model 'luma' cho L1 te hon 4.5 lan (0.0546 -> 0.2459) MA KHONG BAO LOI.
+    # In ra de con doi chieu duoc khi ket qua bat thuong.
+    if arch == "v2":
+        print(f"[auto_enhance] arch=v2 guidance={getattr(model, 'guidance_mode', '?')} "
+              f"ckpt={os.path.basename(ckpt)}", flush=True)
     state = torch.load(ckpt, map_location=device)
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]

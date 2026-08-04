@@ -103,7 +103,11 @@ def main():
             sa[4] - so[4],                 # b delta: >0 AI thieu vang/am (thien lanh)
             sa[1] - so[1],                 # L delta: >0 AI toi hon; <0 AI sang qua
         ]
-        (gap_out if name.lower().startswith(OUTDOOR) else gap_in).append(row)
+        # 04/08 (ra soat vong 7): `startswith(OUTDOOR)` khong the khop bao gio vi
+        # OUTDOOR chua khoa dang "_ext" nam GIUA ten file, khong o dau. Ket qua: nhom
+        # NGOAI TROI luon RONG va moi anh bi don het vao nhom noi that, nen bang "gap"
+        # cua nhom ngoai troi la bang trong ma van duoc in ra nhu that.
+        (gap_out if any(k in name.lower() for k in OUTDOOR) else gap_in).append(row)
 
     def show(tag, g):
         m = agg(g)
