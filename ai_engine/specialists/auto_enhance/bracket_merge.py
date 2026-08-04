@@ -130,6 +130,15 @@ def _read_exposure_time(path: str):
 
 _IMG_EXTS = (".jpg", ".jpeg", ".png", ".tif", ".tiff", ".bmp", ".webp")
 
+# 04/08 (ra soat vong 7) — nua sau cua loi D10 trong tasks/30, chua tung duoc sua.
+# `_read_image` dung cv2.imread nen KHONG doc duoc RAW. Truoc day file .arw/.cr3 chi
+# don gian khong khop `_IMG_EXTS` => bi BO QUA KHONG MOT LOI NAO. Hau qua: chi mot
+# thu muc RAW vao day thi hoac ra "Folder khong co anh" (thong bao sai huong, nguoi
+# dung di tim file bi mat) hoac te hon — mot vai JPEG xem truoc lot vao va duoc gop
+# nhu bracket that. Duong GIAO HANG khong develop RAW la mot QUYET DINH, va quyet
+# dinh do phai duoc NOI RA chu khong duoc im lang.
+_RAW_EXTS = (".arw", ".cr3", ".cr2", ".nef", ".dng", ".raf", ".orf", ".rw2")
+
 
 def group_brackets(folder: str, group_size: int = 0) -> list:
     """Gom ảnh trong folder thành các bracket (mỗi bracket = list path, sort tên).
@@ -142,10 +151,19 @@ def group_brackets(folder: str, group_size: int = 0) -> list:
     if not os.path.isdir(folder):
         raise ValueError(f"Folder không tồn tại: {folder}")
 
-    paths = sorted(
-        p for p in glob.glob(os.path.join(folder, "*"))
-        if os.path.isfile(p) and p.lower().endswith(_IMG_EXTS)
-    )
+    _tat_ca = [p for p in glob.glob(os.path.join(folder, "*")) if os.path.isfile(p)]
+    paths = sorted(p for p in _tat_ca if p.lower().endswith(_IMG_EXTS))
+    _raw = sorted(p for p in _tat_ca if p.lower().endswith(_RAW_EXTS))
+    if _raw:
+        # Noi RO thay vi bo qua im lang (xem chu thich o `_RAW_EXTS`).
+        raise ValueError(
+            f"Folder có {len(_raw)} file RAW ({os.path.basename(_raw[0])}...) mà đường "
+            f"giao hàng này KHÔNG develop RAW được — `_read_image` dùng cv2.imread. "
+            f"Hãy develop RAW trước bằng `ai_engine.data_pairing.ingest."
+            f"process_cr3_to_rgb(path, no_auto_bright=True)` (cờ no_auto_bright BẮT "
+            f"BUỘC cho bracket: thiếu nó là san bằng phơi sáng, mất dải sáng cửa sổ), "
+            f"rồi trỏ lại folder ảnh đã develop."
+        )
     if not paths:
         raise ValueError(f"Folder không có ảnh: {folder}")
 

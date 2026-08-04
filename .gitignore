@@ -34,6 +34,20 @@ test_cr3.py
 
 # 31/07: chan tuyet doi anh khach + repo ngoai (ra soat vong 6: 769 file chua theo doi,
 # 1 lenh git add -A la len repo CONG KHAI)
-data_train_*/
+#
+# 04/08 (ra soat vong 7) — NEO VAO GOC REPO bang dau `/` dau dong.
+# Ban cu viet `data_*/` khong co dau `/`, ma trong .gitignore mot mau khong chua dau
+# gach cheo o GIUA thi khop o MOI CAP thu muc. Nen `data_*/` da khop luon
+# `ai_engine/data_pairing/` — TOAN BO thu muc ma nguon cua khau ingest. Hai hau qua
+# im lang, ca hai deu da xay ra:
+#   1. Moi file .py MOI tao trong ai_engine/data_pairing/ tu 31/07 KHONG duoc
+#      `git add -A` nhat len, khong canh bao, khong len GitHub. ingest.py va config.py
+#      song sot chi vi chung da duoc theo doi TRUOC ngay them dong nay.
+#   2. ripgrep bo qua ca thu muc do => moi lenh "grep toan repo" trong cac vong ra
+#      soat deu mu 15 file, trong do co ingest.py (715 dong, file quan trong nhat cua
+#      khau gop) va config.py (chua ALIGN_SCORE_THRESHOLD).
+# Neo vao goc giu nguyen y dinh ban dau (chan thu muc anh khach o GOC repo) ma khong
+# quet nham ma nguon.
+/data_train_*/
 external/
-data_*/
+/data_*/

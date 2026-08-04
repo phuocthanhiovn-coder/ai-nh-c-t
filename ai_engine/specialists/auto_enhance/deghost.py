@@ -88,10 +88,25 @@ def merge_deghost(paths: list, ref_index: int = None) -> np.ndarray:
         for img in imgs
     ]
 
-    try:
-        cv2.createAlignMTB().process(imgs, imgs)
-    except cv2.error as e:
-        print(f"[deghost] CẢNH BÁO: align MTB lỗi ({e}), dùng ảnh gốc.")
+    # 04/08 (ra soat vong 7) — NHANH THU BA BI BO QUEN (dung khuon mau luat L16).
+    # Ban cu goi `cv2.createAlignMTB().process(imgs, imgs)` TRAN, tren danh sach xep
+    # theo THU TU FILE (tam toi nhat dung dau): khong cong hinh hoc, khong `_de_so`,
+    # khong vong hoan tac. Trong khi do `bracket_merge` da uy quyen ve `ingest` tu
+    # 03/08 va `ingest` duoc va tiep 04/08 — rieng `deghost` khong ai dong toi. MTB
+    # tran tren tam luma <= 6 chinh la co che da day tam toi lech 59-89px.
+    # Nay uy quyen cho CUNG MOT ban cai dat de ba nhanh khong the phan ky nua.
+    from ai_engine.data_pairing.ingest import align_bracket_images
+    _n_vao = len(imgs)
+    imgs = align_bracket_images(imgs)
+    if len(imgs) < _n_vao:
+        print(f"[deghost] cong gop bracket loai {_n_vao - len(imgs)}/{_n_vao} tam "
+              f"(lech qua nguong) -> con {len(imgs)} tam", flush=True)
+    if len(imgs) == 1:
+        # Khong the khu bong ma voi mot tam. Tra thang tam sach thay vi de Mertens va
+        # mask chuyen dong chay tren danh sach 1 phan tu roi ra ket qua vo nghia.
+        print("[deghost] chi con 1 tam sach -> tra thang tam do (khong khu bong ma)",
+              flush=True)
+        return imgs[0].copy()
 
     grays = [cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) for img in imgs]
 
@@ -100,7 +115,12 @@ def merge_deghost(paths: list, ref_index: int = None) -> np.ndarray:
         means = [float(g.mean()) for g in grays]
         ref_index = int(np.argsort(means)[len(means) // 2])
     if not 0 <= ref_index < len(imgs):
-        raise ValueError(f"ref_index={ref_index} ngoài phạm vi 0..{len(imgs) - 1}")
+        # 04/08: cong gop o tren CO THE loai bot tam, ma ben goi khong the biet truoc
+        # con lai bao nhieu. Nem ValueError o day la phat ben goi vi mot viec ho khong
+        # kiem soat duoc. Keo ve bien va NOI RO thay vi lam do ca luot chay.
+        print(f"[deghost] ref_index={ref_index} vuot pham vi sau khi loai tam -> "
+              f"keo ve {min(max(ref_index, 0), len(imgs) - 1)}", flush=True)
+        ref_index = min(max(ref_index, 0), len(imgs) - 1)
     ref = imgs[ref_index]
     gray_ref = grays[ref_index]
 
@@ -125,7 +145,10 @@ def merge_deghost(paths: list, ref_index: int = None) -> np.ndarray:
     alpha = cv2.GaussianBlur(motion, (21, 21), 0).astype(np.float32) / 255.0
     alpha = alpha[..., None]
     out = fused * (1.0 - alpha) + ref_adj * alpha
-    return np.clip(out, 0, 255).astype(np.uint8)
+    # 04/08: LAM TRON, khong CAT. `astype(np.uint8)` cat ve 0 nen ha moi diem anh nua
+    # muc mot cach he thong — cung loi da sua o `ingest.merge_exposures` (L16: cung
+    # mot khuyet diem nam o hai nhanh song song).
+    return np.clip(np.rint(out), 0, 255).astype(np.uint8)
 
 
 # ----------------------------- CLI + tự test ------------------------------

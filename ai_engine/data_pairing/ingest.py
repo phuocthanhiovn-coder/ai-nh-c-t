@@ -151,8 +151,10 @@ def align_bracket_images(images):
         BIEN DANG = max |v_k - t|   (tinh tien deu thi ve 0; xoay/phong thi khong)
 
         Phan bo do tren 79 tam chan may that / 20 bracket:
-            BIEN DANG  p50 0.83 · p90 1.87 · max 1.48 (bo cuc nay)
+            BIEN DANG  p50 0.83 · p90 1.87   (bo cuc nay)
             xoay 0.3do p5 6.99 · phong 1.005 p5 5.96   -> tach sach, bien 2.0x/2.6x
+        (04/08: da xoa "max 1.48" — p90 1.87 > max 1.48 la BAT KHA, mot trong hai so
+         do sai. Khong biet so nao sai nen bo han so khong tin duoc thay vi giu lai.)
 
         ⚠️ cv2.phaseCorrelate(a, b, window) GHI DE a va b TAI CHO khi canh o trung
         getOptimalDFTSize (768 va 1024 deu trung). Nen phai TU nhan cua so Hann roi
@@ -169,14 +171,40 @@ def align_bracket_images(images):
             pb = np.ascontiguousarray(b_gray[y:y + P, x:x + P].astype(np.float32) * win)
             (dx, dy), resp = cv2.phaseCorrelate(pa, pb)
             if resp >= TAU_VUNG:
-                vs.append((dx, dy))
+                vs.append((dx, dy, resp))
         if len(vs) < MIN_VUNG:
             return None, None, len(vs)
-        V = np.asarray(vs, np.float32)
+        n_tin = len(vs)
+        # 04/08 (ra soat vong 7) — BO VUNG YEU NHAT, KHONG HA DO NHAY CUA PHEP DO.
+        # Chan doan cua ban va truoc do LA DUNG: 3 tam bi loai oan deu do MOT vung duy
+        # nhat, va no luon la vung co RESPONSE THAP NHAT (lech 15.7px trong khi 4 vung
+        # kia nhat tri trong 0.65px). Nhung CACH CHUA thi nham: `dv[-2]` bo qua lech
+        # LON NHAT bat ke no den tu dau, tuc ha do nhay cua CA phep do chu khong loai
+        # rieng vung rac. Do lai tren 20 anh that 6000x4000 (moi anh tu lam tham chieu,
+        # nhieu loan bang warpAffine):
+        #     nhieu loan   | max (cu)      | dv[-2]        | bo-vung-yeu (NAY)
+        #     xoay 0.15do  | 20/20 (1.78x) | 15/20 (1.37x) | 20/20 (1.67x)
+        #     xoay 0.20do  | 20/20 (2.37x) | 18/20 (1.83x) | 20/20 (2.24x)
+        #     xoay 0.30do  | 20/20 (3.55x) | 20/20 (2.76x) | 20/20 (3.10x)
+        #     phong 1.003  | 20/20 (2.04x) | 18/20 (1.58x) | 20/20 (1.93x)
+        #     phong 1.005  | 20/20 (3.38x) | 20/20 (2.64x) | 20/20 (3.23x)
+        # (ngoac = bien an toan p50 so voi T_BIEN_DANG; script do:
+        #  scratchpad/do_bien_dang.py, trich _de_so/_chon_vung bang ast tu chinh file
+        #  nay nen khong the troi khoi ma that.)
+        # ⚠️ THANH THAT VE PHAN CHUA KIEM: bang tren chung minh ban nay BAT nhieu loan
+        # ngang `max`. Nua con lai — "giu duoc 3 tam toi tung bi loai oan" — MOI CHI
+        # suy ra tu chan doan (thu pham la vung response thap nhat, nay da bo di), CHUA
+        # do lai tren 53 bracket that. Phai chay lai truoc khi dung de dung dataset.
+        # Cong BIEN DANG nay la lop chong anh ma them 25/07 sau khi chu chi 2 anh hong
+        # (227A1947 ghost / 227A2152 vet tia) — KHONG duoc lam yeu de doi lay tam toi.
+        vs.sort(key=lambda r: r[2])                  # response tang dan
+        if len(vs) > MIN_VUNG:
+            vs = vs[1:]                              # bo dung MOT vung yeu nhat
+        V = np.asarray([(dx, dy) for dx, dy, _ in vs], np.float32)
         t = np.median(V, axis=0)
         dich = float(np.hypot(t[0], t[1]))
         bien_dang = float(np.max(np.hypot(V[:, 0] - t[0], V[:, 1] - t[1])))
-        return dich, bien_dang, len(vs)
+        return dich, bien_dang, n_tin
 
     # (04/08 da xoa ham noi bo _ncc_bracket: khong con loi goi nao sau khi cong NCC
     #  duoc thay bang cong hinh hoc. Docstring cua no con khang dinh "ban Laplacian
@@ -216,6 +244,11 @@ def align_bracket_images(images):
     T_BIEN_DANG = 3.0    # px — xoay/phong. Chan may that: max 1.48 | xoay 0.3do: p5 6.99
     T_DICH = 15.0        # px — tinh tien. MTB sua duoc; chan may that p99 10.34, max 11.24
     out = [ref.copy()]  # tham chiếu luôn có mặt
+    # 04/08 (ra soat vong 7): GIU LAI phep do truoc MTB, song song voi `out`.
+    # Vong hoan tac o cuoi ham truoc day do LAI tu dau cho moi tam, mat 6.5s/bracket
+    # de ra dung con so da tinh o duoi (dong `dich, bd, nv = _do_hinh_hoc(...)`).
+    # Tam tham chieu la phep TU tuong quan nen luon (0, 0) — khong can do.
+    do_truoc = [(0.0, 0.0)]
     # (04/08 da xoa `dich_da_khop`: no chi duoc GHI, khong noi nao DOC. Phep suy
     #  "may co rung khong" tu cac tam khop duoc da bi bo tu 03/08 vi sai — tam bi
     #  xe la tam KHONG khop duoc nen khong de lai bang chung gi. Nay do truc tiep.)
@@ -270,6 +303,7 @@ def align_bracket_images(images):
         if bd is None or bd > T_BIEN_DANG or dich > T_DICH:
             continue
         out.append(warped)
+        do_truoc.append((dich, bd))
         da_nhan.add(i)
 
     # ⭐ CUU TAM BI LOAI KHI CHAN MAY DUNG YEN (fix 03/08).
@@ -306,17 +340,75 @@ def align_bracket_images(images):
                   f"{dich:.2f}px -> LOAI (chong anh ma)", flush=True)
         else:
             out.append(im.copy())
+            do_truoc.append((dich, bd))
             cuu += 1
     if cuu:
+        # 04/08: bo ve "AlignMTB sua duoc". Cau do KHONG dung duoc nua — chinh khoi MTB
+        # ben duoi co vong hoan tac, va tren tam luma <= 6 no kich hoat THAT (do duoc:
+        # 3/14 bracket). Noi "MTB sua duoc" roi ngay sau do hoan tac MTB la tu mau
+        # thuan; nhat ky phai noi dung thu da lam.
         print(f"[bracket] giu {cuu}/{len(bi_loai)} tam khong khop duoc: bien dang duoi "
-              f"{T_BIEN_DANG}px -> chung chi TINH TIEN, AlignMTB sua duoc", flush=True)
+              f"{T_BIEN_DANG}px va dich duoi {T_DICH}px -> chung nam DUNG CHO trong "
+              f"sai so do duoc", flush=True)
 
     # MTB cuối chỉ dọn dịch nhỏ còn sót giữa các frame ĐÃ khớp similarity.
     if len(out) >= 2:
+        # 🔴 FIX 04/08 (ra soat vong 7) — SUA NGUYEN NHAN, khong chi chan trieu chung.
+        #
+        # Trieu chung do duoc: MTB day vang chinh tam TOI vua duoc cuu.
+        #   fp104630 tam luma 2.5 : TRUOC 0.15px -> SAU 59.45px
+        # Quet 14/53 bracket: 3 bracket bi. Anh gop fp104505 lech TB 4.91/255,
+        # 11.78% diem lech >8 muc, 2.66% >30 muc, max 234.
+        #
+        # NGUYEN NHAN: cv2.AlignMTB::process neo vao PHAN TU GIUA danh sach
+        # (out[len//2]). `out` xep [ref, cac tam ORB khop duoc..., cac tam duoc CUU...]
+        # ma tam duoc cuu chinh la cac tam TOI NHAT va bi noi vao CUOI. Nen khi so tam
+        # duoc cuu >= mot nua (vi du chi 1 tam khop duoc ORB: out = [ref, m, r, r, r]
+        # -> neo = out[2] = tam toi nhat), MTB lay ban do nguong-trung-vi cua mot tam
+        # gan den = NHIEU, roi tinh dich RAC cho moi tam khac.
+        #
+        # CACH SUA: dat chinh TAM THAM CHIEU vao vi tri neo len//2 truoc khi goi MTB.
+        # Tam tham chieu la tam co luma trung vi gan 128 nhat (chon o dau ham) nen ban
+        # do nguong-trung-vi cua no co nghia, VA no dung la tam ma moi phep do hinh hoc
+        # ben duoi lay lam goc — hai dieu can cho MTB chay dung.
+        # Vong hoan tac ben duoi VAN GIU lam luoi an toan lop hai (MTB khong dang tin
+        # tren tam luma <= 6 ke ca khi neo dung; doi chung: MTB sua duoc tam toi toi
+        # 60px, that bai o 70px — dung tran 2^max_bits = 64).
+        #
+        # ⚠️ Chu thich cu o day dan "fp104505 out[3]: 1.94 -> 88.70px" lam vi du. Con
+        # so do do TRUOC khi doi thong ke bien dang (`max` -> `dv[-2]` -> bo-vung-yeu),
+        # ma phep doi do lam thay ca thanh phan LAN thu tu cua `out`, nen vi du do
+        # khong con tai lap duoc voi ma hien tai. Vi du con tai lap duoc: fp104630.
+        _piv = len(out) // 2
+        thu_tu = list(range(1, len(out)))
+        thu_tu.insert(_piv, 0)               # tam tham chieu roi dung vao vi tri neo
+        sap = [out[k] for k in thu_tu]
+        truoc_mtb = [im.copy() for im in sap]
         try:
-            cv2.createAlignMTB().process(out, out)
-        except cv2.error:
-            pass
+            # `try` chi bao DUNG loi goi MTB. Ban cu bao ca vong hoan tac ben duoi, nen
+            # mot loi cv2 giua vong se nuot bang `pass` va de lai `out` o trang thai
+            # TRON (nua truoc MTB, nua sau) ma khong in mot dong nao — dung khuon mau
+            # "loi im lang" ma luat L12 goi la nguyen nhan giet du an.
+            cv2.createAlignMTB().process(sap, sap)
+        except cv2.error as e:
+            print(f"[bracket] AlignMTB that bai ({e}) -> giu nguyen pixel truoc MTB",
+                  flush=True)
+            sap = truoc_mtb
+        hoan = 0
+        for pos, k in enumerate(thu_tu):
+            if k == 0:
+                continue                     # tam tham chieu: tu tuong quan, khong the te hon
+            d0, b0 = do_truoc[k]             # da do o tren, khong do lai (tiet kiem 6.5s)
+            d1, b1, _ = _do_hinh_hoc(_de_so(sap[pos]), gray_ref, vung_do, P_do)
+            # ngach 1.0px de khong lat qua lat lai vi nhieu do
+            if d1 is None or d1 > d0 + 1.0 or b1 > b0 + 1.0:
+                sap[pos] = truoc_mtb[pos]
+                hoan += 1
+        if hoan:
+            print(f"[bracket] AlignMTB lam TE HON {hoan}/{len(sap)} tam -> tra ve "
+                  f"pixel TRUOC MTB (chong anh ma)", flush=True)
+        for pos, k in enumerate(thu_tu):     # tra lai thu tu cu cua `out`
+            out[k] = sap[pos]
     return out
 
 def process_cr3_to_rgb(cr3_path, no_auto_bright=False):
@@ -347,7 +439,28 @@ def merge_exposures(images):
         return images[0].copy()
     merge_mertens = cv2.createMergeMertens()
     fusion = merge_mertens.process(images)
-    fusion_8bit = np.clip(fusion * 255, 0, 255).astype(np.uint8)
+    # 04/08 (ra soat vong 7) — HAI LOI TRONG MOT DONG, ca hai deu im lang.
+    #
+    # (1) LAM TRON, khong CAT. `astype(np.uint8)` cat ve 0 (truncate), nen moi diem
+    #     anh bi ha trung binh NUA MUC (-0.5/255) mot cach he thong. Dong nay chay
+    #     cho MOI anh before cua MOI dataset va MOI anh vao cua BENCH-10, tuc lech
+    #     do di vao toan bo du lieu hoc va toan bo bang diem.
+    #
+    # (2) BAO CAO ti le bi cat. cv2.MergeMertens tra ve gia tri VUOT KHOI [0,1] (no
+    #     tai dung anh bang kim tu thap Laplacian nen co rung/overshoot o canh tuong
+    #     phan cao). Ban cu cat thang, khong nen mem, khong noi mot loi — nen neu
+    #     khau gop lam hong dai sang cua so thi khong ai thay. Nay do va IN ra khi
+    #     vuot nguong dang chu y.
+    # ⚠️ KHONG duoc "chua" bang cach chia cho max: da thu, luma tut 76.8 -> 41.1 vi
+    #    mot vai diem rung keo ca anh xuong. Cat van la dung; cai thieu la BAO CAO.
+    tren = float(np.mean(fusion > 1.0)) * 100.0
+    duoi = float(np.mean(fusion < 0.0)) * 100.0
+    if tren > 0.5 or duoi > 0.5:
+        print(f"[merge] Mertens tra ra ngoai [0,1]: {tren:.2f}% diem >1.0, "
+              f"{duoi:.2f}% diem <0.0 (max {float(fusion.max()):.3f}, "
+              f"min {float(fusion.min()):.3f}) -> bi CAT PHANG. Neu con so nay lon "
+              f"o anh co cua so thi dai sang cua so dang bi mat o day.", flush=True)
+    fusion_8bit = np.clip(np.rint(fusion * 255.0), 0, 255).astype(np.uint8)
     return fusion_8bit
 
 def save_sample_visual(before_merged, aligned_before, after, output_path, edit_type):
@@ -416,7 +529,42 @@ def align_before_after(before_img, after_img):
     H, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, INLIER_THRESHOLD)
     if H is None or mask is None:
         return 0.0, before_img.copy()
-        
+
+    # 04/08 (ra soat vong 7) — CONG LANH MANH cho homography. Vi pham L16 dien hinh:
+    # align_bracket_images:262-267 DA co cong nay tu 25/07 (sau khi chu chi 2 anh hong
+    # 227A1947 ghost / 227A2152 vet tia), nhung ham NAY — ham sinh TOAN BO
+    # data/pairs/before — thi chua bao gio co. Ban va dung nhung chi ap cho mot nhanh.
+    #
+    # Co che hong: fit suy bien ban 4 goc ra rat xa; warpPerspective +
+    # BORDER_REPLICATE keo pixel bien thanh VET TIA / DAI MEP GIA. Do 04/08: 45% anh
+    # before cua bo 20 cap moi co dai mep gia.
+    #
+    # Kiem bang ANH XA 4 GOC chu khong doc rieng khoi 2x2 goc trai tren: voi
+    # homography 8-DOF thi chinh thanh phan phoi canh H[2,0]/H[2,1] moi la thu sinh
+    # vet tia, ma no khong the hien trong khoi 2x2.
+    _goc = np.float32([[0, 0], [w, 0], [w, h], [0, h]]).reshape(-1, 1, 2)
+    try:
+        _goc_moi = cv2.perspectiveTransform(_goc, H).reshape(-1, 2)
+    except cv2.error:
+        return 0.0, before_img.copy()
+    _g0 = _goc.reshape(-1, 2)
+    if not np.all(np.isfinite(_goc_moi)):
+        print("[pair] homography ban goc ra VO CUC -> VETO (chong vet tia)", flush=True)
+        return 0.0, before_img.copy()
+    _dich_goc = float(np.max(np.hypot(_goc_moi[:, 0] - _g0[:, 0],
+                                      _goc_moi[:, 1] - _g0[:, 1])))
+    if _dich_goc > 0.25 * max(h, w):
+        print(f"[pair] goc anh dich {_dich_goc:.0f}px > 25% canh -> VETO "
+              f"(fit suy bien, se keo dai mep gia)", flush=True)
+        return 0.0, before_img.copy()
+    # Cung 3 nguong da hieu chinh cua nhanh bracket: scale 0.85-1.18, |xoay| <= 12do.
+    _scale = float(np.sqrt(H[0, 0] ** 2 + H[0, 1] ** 2))
+    _angle = abs(float(np.degrees(np.arctan2(H[1, 0], H[0, 0]))))
+    if not (0.85 <= _scale <= 1.18) or _angle > 12.0:
+        print(f"[pair] homography phi ly (scale {_scale:.3f}, xoay {_angle:.1f}do) "
+              f"-> VETO", flush=True)
+        return 0.0, before_img.copy()
+
     aligned_before_rough = cv2.warpPerspective(before_img, H, (w, h), borderMode=cv2.BORDER_REPLICATE)
     
     # ECC Refine trên 512px
@@ -448,6 +596,16 @@ def align_before_after(before_img, after_img):
         warp_matrix_large[2, 0] = warp_matrix[2, 0] / s
         warp_matrix_large[2, 1] = warp_matrix[2, 1] / s
         
+        # 04/08: cong lanh manh LAN HAI. ECC tinh chinh tren anh 512px roi phong
+        # nguoc len full-res, nen mot nghiem ECC troi nhe o 512 thanh dich lon o
+        # 6000px. Neu no ban goc di qua 5% canh thi giu ban warp THO (da qua cong
+        # o tren) thay vi tin ket qua tinh chinh.
+        _gm = cv2.perspectiveTransform(_goc, np.linalg.inv(warp_matrix_large)) \
+            .reshape(-1, 2) if abs(np.linalg.det(warp_matrix_large)) > 1e-9 else None
+        if _gm is None or not np.all(np.isfinite(_gm)) or float(np.max(np.hypot(
+                _gm[:, 0] - _g0[:, 0], _gm[:, 1] - _g0[:, 1]))) > 0.05 * max(h, w):
+            raise cv2.error("ECC homography ban goc di qua xa -> giu ban warp tho")
+
         aligned_before_final = cv2.warpPerspective(
             aligned_before_rough, warp_matrix_large, (w, h),
             flags=cv2.INTER_LANCZOS4 + cv2.WARP_INVERSE_MAP,
