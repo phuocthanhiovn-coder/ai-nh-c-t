@@ -166,6 +166,14 @@ def apply(img, params=None):
     assert img.dtype == np.float32 or img.dtype == np.float64
     h, w = img.shape[:2]
 
+    # ⭐ 04/08 (ra soat vong 7) — strength=0 PHAI bit-identical (hop dong toan tu).
+    # Ban cu van chay segment_grass + green_boost roi tron theo mask, va green_boost
+    # ep vung co qua uint8 o giua chuoi, nen ke ca voi strength=0 anh ra VAN KHAC anh
+    # vao (mat bit o vung co). Vua vi pham hop dong "0 = khong lam gi", vua vi pham
+    # nguyen tac bat bien so 3 (khong ha 8-bit giua chuoi).
+    if strength <= 0.0:
+        return np.asarray(img, dtype=np.float32).copy()
+
     mask = segment_grass(img)
 
     if mask.max() < 1e-6:

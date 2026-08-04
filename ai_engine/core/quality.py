@@ -108,11 +108,24 @@ def guided_upsample(small_map, guide_full):
 
     # Fallback: khong co ximgproc -> bilateral tren [map, guide_gray] gop kenh,
     # de range-weight bam theo do tuong dong cua guide (xam quanh canh).
-    guide_gray = guide_j.mean(axis=2, keepdims=True).astype(np.float32)
-    stacked = np.concatenate([resized, guide_gray], axis=2).astype(np.float32)
-    filtered = cv2.bilateralFilter(stacked, d=9, sigmaColor=0.1, sigmaSpace=25)
-    if filtered.ndim == 2:
-        filtered = filtered[:, :, None]
+    # ⭐ 04/08 (ra soat vong 7) — NHANH DU PHONG NAY CHET CHAC, khong phai du phong.
+    # `cv2.bilateralFilter` CHI nhan anh 1 kenh hoac 3 kenh. Ban cu gop `resized`
+    # (1 hoac 3 kenh) voi `guide_gray` (1 kenh) thanh 2 hoac 4 kenh roi goi thang ->
+    # LUON nem cv2.error. Tuc khi khong co ximgproc thi ham nay khong "chay cham hon"
+    # ma DO HAN, va vi loi phat sinh o day (ngoai khoi try o tren) nen no do thanh mot
+    # cv2.error kho hieu chu khong noi ro nguyen nhan.
+    # Nay: loc TUNG KENH mot voi guide 1 kenh (dung so kenh hop le), va neu van hong
+    # thi NOI RO thay vi nem loi cv2 troi noi.
+    try:
+        kenh = [cv2.bilateralFilter(np.ascontiguousarray(resized[:, :, i]),
+                                    d=9, sigmaColor=0.1, sigmaSpace=25)
+                for i in range(resized.shape[2])]
+        filtered = np.stack(kenh, axis=2).astype(np.float32)
+    except cv2.error as e:
+        raise RuntimeError(
+            f"guided_upsample: khong co cv2.ximgproc va nhanh du phong bilateral cung "
+            f"that bai ({e}). Cai opencv-contrib-python de co ximgproc."
+        ) from e
     out = filtered[:, :, : resized.shape[2]]
     return out[:, :, 0] if squeeze_out else out
 
@@ -186,7 +199,15 @@ def write_image(path, img, quality=95):
 
     if ext in (".jpg", ".jpeg"):
         out = np.clip(img * 255.0 + 0.5, 0, 255).astype(np.uint8)
-        ok = cv2.imwrite(path, out, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality)])
+        # ⭐ 04/08 (ra soat vong 7) — GIU CHROMA 4:4:4, ke ca o quality=100.
+        # Mac dinh cua OpenCV la 4:2:0, tuc VUT MOT NUA do phan giai mau theo ca hai
+        # chieu, ngay trong chinh thu vien "loi giu chat luong" cua du an. Nguyen tac
+        # bat bien so 3 noi ro: chi nen 8-bit o buoc export cuoi, khong nen ngam.
+        # deliver.py va bench_tournament.py da truyen 4:4:4 dung; rieng ham dung chung
+        # nay thi khong (luat L16 — ban va dung nhung khong ap cho moi nhanh).
+        ok = cv2.imwrite(path, out, [int(cv2.IMWRITE_JPEG_QUALITY), int(quality),
+                                     int(cv2.IMWRITE_JPEG_SAMPLING_FACTOR),
+                                     int(cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444)])
     elif ext == ".png":
         out = np.clip(img * 65535.0 + 0.5, 0, 65535).astype(np.uint16)
         ok = cv2.imwrite(path, out)

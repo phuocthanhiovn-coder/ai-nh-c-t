@@ -44,11 +44,42 @@ def check_one(modpath, fnname):
     return True
 
 
+def check_planner_ops():
+    """04/08 (ra soat vong 7) — MOI op ma planner co the sinh ra PHAI co trong REGISTRY.
+
+    Lenh "can bang trang" tung lam SAP planner vi `_FALLBACK_RULES` tro toi op ten
+    "white_balance" (ten that: "auto_white_balance") voi tham so "strength" (ten that:
+    "wb_strength"). Khong ai phat hien vi khong co buoc kiem nao noi hai bang nay lai.
+    """
+    from ai_engine.orchestrator.registry import REGISTRY, clamp_params
+    from ai_engine.orchestrator import planner
+
+    loi = []
+    for _rx, op, params in planner._FALLBACK_RULES:
+        if op not in REGISTRY:
+            loi.append(f"op '{op}' khong co trong REGISTRY")
+            continue
+        try:
+            clamp_params(op, params)          # bat luon ten THAM SO sai
+        except Exception as e:
+            loi.append(f"op '{op}' tham so {params} khong hop le: {e}")
+    if loi:
+        raise AssertionError("planner sinh op khong chay duoc: " + " | ".join(loi))
+    return len(planner._FALLBACK_RULES)
+
+
 def main():
     print("=" * 64)
     print("  KIEM DINH HOP DONG OPERATOR (conformance)")
     print("=" * 64)
     ok, fail = 0, 0
+    try:
+        n = check_planner_ops()
+        print(f"  [PASS] planner          {n} luat fallback deu tro toi op co that")
+        ok += 1
+    except Exception as e:
+        print(f"  [FAIL] planner          {e}")
+        fail += 1
     for modpath, fnname in SPECIALISTS:
         short = modpath.split(".")[-2]
         try:

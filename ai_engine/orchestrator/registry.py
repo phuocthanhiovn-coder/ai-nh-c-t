@@ -169,6 +169,19 @@ def get_registry_summary():
 def clamp_params(op_name, params):
     """Chuan hoa params ve dung schema (float clamp / enum whitelist / bool coerce), dien default."""
     schema = REGISTRY[op_name]["params"]
+    # ⭐ 04/08 (ra soat vong 7) — KHOA LA PHAI LAM DUNG MAY, khong duoc bo im lang.
+    # Ban cu chi duyet cac khoa CO trong schema, nen mot khoa go sai (vd "strenght",
+    # "sharpen_radius") bi BO QUA hoan toan va gia tri MAC DINH duoc dien vao thay.
+    # Hau qua that: nguoi goi viet {"strenght": 0} de TAT op, nhung op lai chay o lieu
+    # MAC DINH — tuc "tat op" bien thanh "chay het co", khong mot canh bao nao.
+    # Day chinh xac la cai bay `.get(khoa, mac_dinh)` ma luat so 1 trong BAN_GIAO goi
+    # la thu "da giet du an": bien loi go phim thanh thi nghiem sai lang le.
+    la = set(params or {}) - set(schema)
+    if la:
+        raise ValueError(
+            f"op '{op_name}' nhan khoa la {sorted(la)}. Khoa hop le: {sorted(schema)}. "
+            f"KHONG bo qua im lang — go sai mot chu la ca thi nghiem chay sai lieu."
+        )
     clamped = {}
     for pname, pschema in schema.items():
         ptype = pschema.get("type", "float")

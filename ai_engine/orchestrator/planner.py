@@ -96,14 +96,25 @@ def _call_llm(command, api_key):
 # --- Fallback rule-based (regex) ---
 
 _FALLBACK_RULES = [
-    (re.compile(r"toi|darker|\bdark\b", re.IGNORECASE), "brightness", {"amount": -0.3}),
+    # ⭐ 04/08 (ra soat vong 7) — "toi" la DAI TU, khong phai lenh lam toi.
+    # Mau cu `toi|darker|dark` khop ca chu "toi" trong "TOI muon anh sang hon", nen
+    # cau do sinh ra HAI op nguoc chieu: brightness -0.3 (do "toi") va +0.3 (do
+    # "sang"). Nguoi dung go tieng Viet khong dau thi "toi" xuat hien trong gan nhu
+    # moi cau. Nay bat buoc "toi" phai di kem tu chi lenh.
+    (re.compile(r"\blam toi\b|\btoi hon\b|\btoi di\b|darker|\bdark\b", re.IGNORECASE),
+     "brightness", {"amount": -0.3}),
     (re.compile(r"sang|brighter|\bbright\b", re.IGNORECASE), "brightness", {"amount": 0.3}),
     (re.compile(r"am hon|warm", re.IGNORECASE), "temperature", {"amount": 0.3}),
     (re.compile(r"lanh|cool|cold", re.IGNORECASE), "temperature", {"amount": -0.3}),
     (re.compile(r"tuong phan|contrast", re.IGNORECASE), "contrast", {"amount": 0.2}),
     (re.compile(r"ruc|vibrant|saturat", re.IGNORECASE), "saturation", {"amount": 0.3}),
     (re.compile(r"\bnet\b|sharp", re.IGNORECASE), "sharpen", {"amount": 0.2}),
-    (re.compile(r"can bang trang|white balance", re.IGNORECASE), "white_balance", {"strength": 1.0}),
+    # 04/08 (ra soat vong 7): op ten "white_balance" KHONG CO trong REGISTRY (ten that
+    # la "auto_white_balance") va tham so cua no la "wb_strength" chu khong phai
+    # "strength". Nen lenh "can bang trang" lam SAP planner: KeyError o clamp_params.
+    # Sau ban va khoa-la o registry.py hom nay thi no con nem som hon nua.
+    (re.compile(r"can bang trang|white balance", re.IGNORECASE),
+     "auto_white_balance", {"wb_strength": 1.0}),
     (re.compile(r"tu dong|auto", re.IGNORECASE), "auto_enhance", {}),
 ]
 

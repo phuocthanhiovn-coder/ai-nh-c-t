@@ -41,6 +41,14 @@ def run_plan(img_path, plan, out_path):
     if ext == ".png":
         cv2.imwrite(out_path, out_u8)
     else:
-        cv2.imwrite(out_path, out_u8, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        # ⭐ 04/08 (ra soat vong 7) — q100 + 4:4:4, khong q95 + 4:2:0 mac dinh.
+        # Nguyen tac bat bien so 3: chi nen 8-bit o buoc export CUOI, khong nen ngam.
+        # 4:2:0 (mac dinh cua OpenCV) vut mot nua do phan giai mau theo ca hai chieu —
+        # va day la duong xuat cua orchestrator, tuc anh nguoi dung nhan that.
+        # delivery/deliver.py da lam dung tu task 21; hai duong con lai (file nay va
+        # webapp) thi khong (luat L16).
+        cv2.imwrite(out_path, out_u8, [cv2.IMWRITE_JPEG_QUALITY, 100,
+                                       cv2.IMWRITE_JPEG_SAMPLING_FACTOR,
+                                       cv2.IMWRITE_JPEG_SAMPLING_FACTOR_444])
 
     return {"in_shape": in_shape, "out_shape": out_shape, "applied": applied}

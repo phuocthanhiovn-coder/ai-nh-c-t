@@ -45,10 +45,17 @@ def _cfg_ckpt():
     """FIX 30/07: truoc day hardcode CH_C (doi CU bac mau) va bo qua config ->
     moi cai tien cho CH_N khong bao gio den duong giao hang nay."""
     import json as _j, os as _o
-    p = _o.path.join(_o.path.abspath(_o.path.join(_o.path.dirname(__file__), *[".."]*4)),
+    # ⭐ 04/08 (ra soat vong 7) — OFF-BY-ONE, y het process.py:47 (L16: cung mot loi
+    # o hai nhanh). File nay o <repo>/ai_engine/specialists/auto_enhance/ nen len goc
+    # repo can BA cap "..", khong phai bon. Di bon cap la tro ra ngoai repo ->
+    # exists() luon False -> roi ve duong dan tuong doi -> ket qua phu thuoc cwd.
+    p = _o.path.join(_o.path.abspath(_o.path.join(_o.path.dirname(__file__), *[".."]*3)),
                      "checkpoints", "auto_enhance_config.json")
     if not _o.path.exists(p):
-        p = "checkpoints/auto_enhance_config.json"
+        raise FileNotFoundError(
+            f"Khong thay cau hinh model tai {p}. Truoc day cho nay am tham roi ve "
+            f"duong dan tuong doi nen loi bi che giau."
+        )
     with open(p, encoding="utf-8") as f:
         return _j.load(f)["checkpoint"]
 

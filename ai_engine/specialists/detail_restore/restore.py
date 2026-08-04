@@ -15,7 +15,15 @@ import numpy as np
 
 cv2.setNumThreads(3)
 
-_CKPT = "checkpoints/ext/realesr-general-x4v3.pth"
+# ⭐ 04/08 (ra soat vong 7) — DUONG DAN TUYET DOI, neo theo vi tri file nay.
+# Ban cu la duong dan TUONG DOI, nen chay tu bat ky cwd nao khac goc repo la khong
+# thay weights -> `_failed = True` -> op bi bo IM LANG suot ca phien, trong khi
+# brain/run.py van ghi vao nhat ky la da chay `detail_restore`. Cung khuon mau "bay
+# im lang" da go o ops_basic hom nay.
+import os as _os
+_CKPT = _os.path.join(
+    _os.path.abspath(_os.path.join(_os.path.dirname(__file__), *[".."] * 3)),
+    "checkpoints", "ext", "realesr-general-x4v3.pth")
 _TILE = 512          # xu ly tung o 512 (input) de gioi han RAM
 _PAD = 16
 _model = None
