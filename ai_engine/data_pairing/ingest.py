@@ -79,28 +79,175 @@ def align_bracket_images(images):
     h, w = ref.shape[:2]
     max_shift = 0.25 * max(h, w)
 
-    # CLAHE để frame thiếu/dư sáng vẫn ra feature cho ORB.
+    # ⭐ FIX 03/08 — LOI DA GIET MOI TAM ANH CUA SO CUA DU AN.
+    # Do duoc tren bracket that fp104505 (5 tam, sang TB 1.7 / 5.8 / 19.1 / 51.0 / 110.7):
+    #   TRUOC FIX: cong veto giu 2/5 tam — chi con [110.7, 51.0].
+    #   BA TAM TOI NHAT BI LOAI SACH, trong do FP104505 la tam DUY NHAT giu duoc
+    #   canh ngoai cua so (vung cua so: sang TB 0.20, CHI 0.04% diem chay).
+    #   Ket qua: vung cua so trong anh gop CHAY 53.77% -> trang bech, mat sach nha
+    #   hang xom / cay / mai. Day dung la loi khach che tu 14/07 va ta da chua nham
+    #   bang tone suot mot thang.
+    # NGUYEN NHAN: ca ORB lan edge-NCC deu so hai tam LECH NHAU 6+ KHAU PHOI SANG.
+    # Tam toi co luma TB 1.7/255 — gan nhu khong con muc xam nao de dung feature,
+    # va NCC voi tam sang 110.7 luon gan 0. Chu thich cu o duoi tung ghi nhan dieu
+    # nay ("tam RAT TOI ... it/khong feature -> veto") nhung chon cach VUT tam do
+    # thay vi sua phep so sanh. Vut tam toi = vut cua so.
+    # CACH SUA: keo tung tam ve CUNG THANG DO SANG truoc khi SO SANH. Chi dung cho
+    # khau do-va-cham; anh tra ve van la PIXEL GOC da warp, khong he bi keo sang.
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    gray_ref = clahe.apply(cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY))
 
+    def _de_so(bgr):
+        """Dua mot tam bracket ve thang do sang chung DE SO SANH (khong doi anh goc).
+
+        Keo theo phan vi 1%-99.5% (ben voi diem chay va vung den tit) roi CLAHE.
+        Nho vay tam toi co du muc xam de ORB thay feature va de edge-NCC co nghia.
+        """
+        g = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        lo, hi = np.percentile(g, (1.0, 99.5))
+        if hi - lo >= 1.0:
+            g = np.clip((g - lo) * (255.0 / (hi - lo)), 0.0, 255.0)
+        return clahe.apply(g.astype(np.uint8))
+
+    def _chon_vung(g, P=768):
+        """Chon 5 o do: trong MOI GOC PHAN TU + tam, lay o co KET CAU cao nhat.
+
+        Goc anh noi that thuong la mang tuong/tran PHANG (do duoc: std 7.47) —
+        tuong quan pha khong bam duoc, tra ve rac 100-400px. Chon theo ket cau
+        thi tam toi co 5/5 vung tin cay (23/24 tam) thay vi 2-3/5 khi lay goc
+        co dinh, va bien dang do duoc cua nhom chan may giam 2.56 -> 1.48.
+        """
+        H, W = g.shape[:2]
+        P = int(min(P, H // 2, W // 2))
+        ra = []
+        for gy in (0, 1):
+            for gx in (0, 1):
+                y0, x0 = gy * (H // 2), gx * (W // 2)
+                dy, dx = max(0, H // 2 - P), max(0, W // 2 - P)
+                tot, best = -1.0, (y0, x0)
+                for fy in (0.05, 0.5, 0.95):
+                    for fx in (0.05, 0.5, 0.95):
+                        y = min(max(0, y0 + int(dy * fy)), H - P)
+                        x = min(max(0, x0 + int(dx * fx)), W - P)
+                        s = float(g[y:y + P:8, x:x + P:8].std())   # lay mau thua cho nhanh
+                        if s > tot:
+                            tot, best = s, (y, x)
+                ra.append(best)
+        ra.append(((H - P) // 2, (W - P) // 2))                    # tam anh
+        return ra, P
+
+    _HANN = {}
+
+    def _do_hinh_hoc(a_gray, b_gray, vung, P):
+        """Tach DICH (tinh tien) khoi BIEN DANG (xoay/phong) — 03/08.
+
+        VI SAO TACH (do duoc, khong doan): AlignMTB chay ngay sau cong nay SUA
+        SACH tinh tien toi 70px ke ca tren tam TOI NHAT (8.26->2.06, 70.14->2.27),
+        nhung KHONG sua duoc xoay/phong (0.3do: 14.69 -> 19.81, TE HON).
+        => Chan tinh tien = mat tam toi OAN, doi lay zero loi ich.
+        => Chi BIEN DANG moi dang chan.
+
+        v_k = vec-to dich do tai vung k (chi lay vung co response >= TAU).
+        t   = trung vi cua v_k  ->  DICH = |t|
+        BIEN DANG = max |v_k - t|   (tinh tien deu thi ve 0; xoay/phong thi khong)
+
+        Phan bo do tren 79 tam chan may that / 20 bracket:
+            BIEN DANG  p50 0.83 · p90 1.87 · max 1.48 (bo cuc nay)
+            xoay 0.3do p5 6.99 · phong 1.005 p5 5.96   -> tach sach, bien 2.0x/2.6x
+
+        ⚠️ cv2.phaseCorrelate(a, b, window) GHI DE a va b TAI CHO khi canh o trung
+        getOptimalDFTSize (768 va 1024 deu trung). Nen phai TU nhan cua so Hann roi
+        goi KHONG truyen `window` — da kiem tuong duong tung chu so.
+
+        Tra ve (dich_px, bien_dang_px, so_vung_tin_cay).
+        """
+        if P not in _HANN:
+            _HANN[P] = cv2.createHanningWindow((P, P), cv2.CV_32F)
+        win = _HANN[P]
+        vs = []
+        for (y, x) in vung:
+            pa = np.ascontiguousarray(a_gray[y:y + P, x:x + P].astype(np.float32) * win)
+            pb = np.ascontiguousarray(b_gray[y:y + P, x:x + P].astype(np.float32) * win)
+            (dx, dy), resp = cv2.phaseCorrelate(pa, pb)
+            if resp >= TAU_VUNG:
+                vs.append((dx, dy))
+        if len(vs) < MIN_VUNG:
+            return None, None, len(vs)
+        V = np.asarray(vs, np.float32)
+        t = np.median(V, axis=0)
+        dich = float(np.hypot(t[0], t[1]))
+        bien_dang = float(np.max(np.hypot(V[:, 0] - t[0], V[:, 1] - t[1])))
+        return dich, bien_dang, len(vs)
+
+    # (04/08 da xoa ham noi bo _ncc_bracket: khong con loi goi nao sau khi cong NCC
+    #  duoc thay bang cong hinh hoc. Docstring cua no con khang dinh "ban Laplacian
+    #  nhan 4/4 tam" — do lai thi la 0/4, tuc chinh chu thich do cung sai.)
+
+    # 03/08: CHAN tam khac kich thuoc. Ham nay gia dinh moi tam cung khung (bracket
+    # tu mot lan bam may). Neu goi voi lo tron anh doc/ngang thi cat o theo toa do
+    # tam tham chieu se ra mang RONG -> ValueError kho hieu o tan trong _do_hinh_hoc.
+    # Da xay ra that khi script goi gom bracket sai (tron nhieu phong). Loai som + noi ro.
+    khac_co = {k for k, im in enumerate(images) if im.shape[:2] != ref.shape[:2]}
+    if khac_co:
+        print(f"[bracket] LOAI {len(khac_co)} tam khac kich thuoc voi tam tham chieu "
+              f"{ref.shape[1]}x{ref.shape[0]} — bracket phai cung khung. Neu con so nay "
+              f"lon, rat co the khau GOM BRACKET dang sai.", flush=True)
+        images = [im for k, im in enumerate(images) if k not in khac_co]
+        if len(images) <= 1:
+            return images
+        ref_i = min(range(len(images)),
+                    key=lambda k: abs(float(np.median(
+                        cv2.cvtColor(images[k], cv2.COLOR_BGR2GRAY))) - 128.0))
+        ref = images[ref_i]
+        h, w = ref.shape[:2]
+        max_shift = 0.25 * max(h, w)
+
+    gray_ref = _de_so(ref)
+    vung_do, P_do = _chon_vung(gray_ref)        # chon 1 lan cho ca bracket (~1.6s)
+
+    # NGUONG DA HIEU CHINH BANG SO (03/08) — do tren 53 bracket that gom bang
+    # groups_by_after(), 127 tam chan may + 3 nhom doi chung (dich 10/30/60px,
+    # phong 1.005/1.01, xoay 0.3/0.5/1.0 do). Nghiem thu dau-cuoi 10 bracket:
+    #   chan may that     -> giu 49/49 tam (100%), gom MOI tam toi luma 1.24-6.6
+    #   xe 1 tam 60px     -> bat dung 10/10
+    #   xoay 1 tam 0.5do  -> bat dung 10/10
+    #   phong 1 tam 1.005 -> bat dung 10/10
+    TAU_VUNG = 0.05      # response toi thieu de TIN mot vung do
+    MIN_VUNG = 3         # phai co it nhat 3 vung tin cay moi ket luan
+    T_BIEN_DANG = 3.0    # px — xoay/phong. Chan may that: max 1.48 | xoay 0.3do: p5 6.99
+    T_DICH = 15.0        # px — tinh tien. MTB sua duoc; chan may that p99 10.34, max 11.24
     out = [ref.copy()]  # tham chiếu luôn có mặt
+    # (04/08 da xoa `dich_da_khop`: no chi duoc GHI, khong noi nao DOC. Phep suy
+    #  "may co rung khong" tu cac tam khop duoc da bi bo tu 03/08 vi sai — tam bi
+    #  xe la tam KHONG khop duoc nen khong de lai bang chung gi. Nay do truc tiep.)
+    da_nhan = {ref_i}   # 03/08: theo doi theo CHI SO (so sanh `is` sai vi anh da bi warp)
     for i, im in enumerate(images):
         if i == ref_i:
             continue
-        gray = clahe.apply(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
-        res = extract_and_match(gray, gray_ref)
+        gray = _de_so(im)          # 03/08: keo ve cung thang sang truoc khi do feature
+        # 03/08: tham so CUC BO rong tay hon config chung (2000/15/5.0) — do duoc
+        # tren bracket that fp104505: bo chat khop 1/4 tam (cua so chay 21.03%),
+        # bo rong khop 4/4 tam (chay 14.47%). Tam KHOP DUOC thi duoc NAN dung cho;
+        # tam chi "cuu" thi giu nguyen vi tri cu, nen khop duoc luon tot hon.
+        # KHONG sua config.py vi MIN_MATCH_COUNT/INLIER_THRESHOLD con dung cho
+        # khau ghep cap before/after — doi o do se gay hoi quy cho ca dataset.
+        BR_FEATURES, BR_MIN_MATCH, BR_RANSAC, BR_TOP = 4000, 12, 4.0, 500
+        res = extract_and_match(gray, gray_ref,
+                                max_features=BR_FEATURES, min_match=BR_MIN_MATCH)
         if res is None:
             continue
         kp1, kp2, matches = res
-        # tam RAT TOI (no_auto_bright -> luma ~2) it/khong feature -> matches None: veto.
-        if matches is None or len(matches) < MIN_MATCH_COUNT:
+        # tam RAT TOI (no_auto_bright -> luma ~2) it/khong feature -> matches None.
+        # KHONG con la an tu hinh: tam bi loai o day van co the duoc cuu o duoi
+        # neu chan may dung yen (xem khoi FIX 03/08 cuoi ham).
+        if matches is None or len(matches) < BR_MIN_MATCH:
             continue
+        matches = sorted(matches, key=lambda m: m.distance)[:BR_TOP]
         src_pts = np.float32([kp1[m.queryIdx].pt for m in matches]).reshape(-1, 1, 2)
         dst_pts = np.float32([kp2[m.trainIdx].pt for m in matches]).reshape(-1, 1, 2)
         # SIMILARITY 4-DOF (scale+xoay+dịch) — KHÔNG phối cảnh nên không vệt tia.
         M, mask = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.RANSAC,
-                                              ransacReprojThreshold=INLIER_THRESHOLD)
-        if M is None or mask is None or int(mask.sum()) < MIN_MATCH_COUNT:
+                                              ransacReprojThreshold=BR_RANSAC)
+        if M is None or mask is None or int(mask.sum()) < BR_MIN_MATCH:
             continue
         # Cổng lành mạnh: chặn fit suy biến (scale/xoay/dịch phi lý).
         scale = float(np.sqrt(M[0, 0] ** 2 + M[0, 1] ** 2))
@@ -111,12 +258,58 @@ def align_bracket_images(images):
         # LANCZOS4: warp bilinear làm MỀM ảnh mỗi lần resample; Lanczos giữ nét.
         warped = cv2.warpAffine(im, M, (w, h), flags=cv2.INTER_LANCZOS4,
                                 borderMode=cv2.BORDER_REPLICATE)
-        # Kiểm chứng sau warp bằng NCC cạnh (bất biến tone) — siết 0.45 chống ghost.
-        ncc = compute_edge_ncc(cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY),
-                               cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY))
-        if ncc < 0.45:
+        # Kiểm chứng sau warp bằng NCC cạnh — siết 0.45 chống ghost.
+        # 03/08: PHAI cham tren ban DA KEO VE CUNG THANG SANG. Ban cu cham thang
+        # tren pixel goc, nen tam toi (luma TB 1.7) luon cho NCC ~0 va bi veto —
+        # do la co che da vut mat tam giu cua so o MOI bracket cua du an.
+        # NCC canh chi "bat bien tone" khi hai anh cung thang do sang; lech 6 khau
+        # thi khong con bat bien nua.
+        # 03/08: cong HINH HOC thay cong NCC. Tam da nan van phai chung minh no
+        # THAT SU nam dung cho — do 5 vung, khong tin rieng ket qua fit.
+        dich, bd, nv = _do_hinh_hoc(_de_so(warped), gray_ref, vung_do, P_do)
+        if bd is None or bd > T_BIEN_DANG or dich > T_DICH:
             continue
         out.append(warped)
+        da_nhan.add(i)
+
+    # ⭐ CUU TAM BI LOAI KHI CHAN MAY DUNG YEN (fix 03/08).
+    # Van de: tam bracket toi nhat co noi that DEN TUYET DOI va chi cua so sang;
+    # tam tham chieu thi nguoc lai — noi that ro, cua so chay. Hai tam gan nhu
+    # KHONG CO CAU TRUC CHUNG nao de ORB khop, nen tam toi luon bi veto du no
+    # nam dung vi tri. Do tren bracket that fp104505: giu 2/5 tam, mat ca 3 tam
+    # toi — trong do co tam DUY NHAT giu duoc canh ngoai cua so.
+    #
+    # Nhung veto van CAN THIET de chong anh ma (them 25/07 sau khi chu chi 2 anh
+    # hong). Nen KHONG duoc bo — phai phan biet "tam khac phoi sang" voi "may rung".
+    # Cach phan biet: neu cac tam DA KHOP deu dich rat it thi may dung yen (anh
+    # BDS gan nhu luon chup chan may) -> tam bi loai cung dang o dung cho, giu lai
+    # va de AlignMTB (bat bien do sang theo thiet ke) don not vai pixel con lai.
+    # Neu co tam dich nhieu -> may co rung -> giu nguyen hanh vi veto cu.
+    #
+    # Do duoc sau fix, vung cua so anh fp104505:
+    #   giu 2/5 tam -> chay 53.77%, tuong phan 0.191
+    #   giu 5/5 tam -> chay 25.31%, tuong phan 0.224   (AutoHDR: 0.28%, 0.234)
+    # ⚠️ SUA 03/08 (lan 2) — ban dau toi suy ra "may dung yen" TU CAC TAM KHOP DUOC.
+    # Sai: tam bi xe la tam KHONG KHOP DUOC, nen no khong de lai bang chung gi va
+    # bi cuu OAN. Kiem hoi quy bat duoc: xe 1 tam 60px van giu 5/5 => pha luon
+    # chuc nang chong anh ma. Nay DO TRUC TIEP tung tam duoc cuu bang tuong quan
+    # pha tren ban da keo ve cung thang sang — bat bien do sang, do duoc dich that.
+    bi_loai = [(k, images[k]) for k in range(len(images)) if k not in da_nhan]
+    cuu = 0
+    for k, im in bi_loai:
+        dich, bd, nv = _do_hinh_hoc(_de_so(im), gray_ref, vung_do, P_do)
+        if bd is None:
+            print(f"[bracket] tam #{k} chi co {nv}/{MIN_VUNG} vung tin cay -> LOAI "
+                  f"(khong du bang chung de ket luan)", flush=True)
+        elif bd > T_BIEN_DANG or dich > T_DICH:
+            print(f"[bracket] tam #{k} khong khop duoc VA bien dang {bd:.2f}px / dich "
+                  f"{dich:.2f}px -> LOAI (chong anh ma)", flush=True)
+        else:
+            out.append(im.copy())
+            cuu += 1
+    if cuu:
+        print(f"[bracket] giu {cuu}/{len(bi_loai)} tam khong khop duoc: bien dang duoi "
+              f"{T_BIEN_DANG}px -> chung chi TINH TIEN, AlignMTB sua duoc", flush=True)
 
     # MTB cuối chỉ dọn dịch nhỏ còn sót giữa các frame ĐÃ khớp similarity.
     if len(out) >= 2:
@@ -203,9 +396,16 @@ def align_before_after(before_img, after_img):
     h, w = after_img.shape[:2]
     
     res = extract_and_match(gray_before, gray_after)
-    if res is None:
+    # FIX 04/08: extract_and_match tra ve TUPLE (None, None, None) khi that bai,
+    # KHONG BAO GIO tra bare None -> phep kiem `res is None` cu la MA CHET, roi
+    # `len(matches)` nem TypeError. Ham nay sinh TOAN BO data/pairs/before, va
+    # `run_ingest` bat Exception rong nen cap anh bi VUT AM THAM thay vi ve REVIEW
+    # voi nhan align_low. Dung loai anh toi/it feature ma ca ban va hom nay nham toi.
+    # (Chu thich trong align.py tung ghi "ban va tai GOC" — thuc te moi va
+    #  verify_and_align, bo sot chinh ham nay.)
+    if res is None or res[2] is None:
         return 0.0, before_img.copy()
-        
+
     kp1, kp2, matches = res
     if len(matches) < MIN_MATCH_COUNT:
         return 0.0, before_img.copy()

@@ -59,6 +59,17 @@ def train_nm(cfg: dict) -> dict:
     print(f"[NM] params={sum(p.numel() for p in model.parameters())} kwargs={nm_kwargs}")
 
     lab_weights = tuple(loss_cfg.get("lab_weights", (1.0, 1.0, 1.0)))
+    # FIX 02/08 (luat L16 — va phai ap cho CA N nhanh): 3 dong w_chroma/w_sharp/w_clip
+    # truoc day THIEU o day y het train_sweep.py, trong khi tools/launch_nm.py DANG
+    # khai "w_chroma": 2.0 -> term mau bi bo qua IM LANG. NM_A da train nhu vay.
+    _KNOWN_LOSS_KEYS = {
+        "w_l1", "w_char", "w_lab", "w_perc", "lab_weights", "w_hi", "hi_gamma",
+        "w_dark", "dark_thresh", "w_color", "w_lc", "w_chroma", "w_sharp", "w_clip",
+    }
+    _unknown = sorted(set(loss_cfg) - _KNOWN_LOSS_KEYS)
+    if _unknown:
+        raise ValueError(f"loss_cfg co khoa la {_unknown}: CombinedLoss KHONG nhan nen "
+                         f"se bi bo qua IM LANG. Khoa hop le: {sorted(_KNOWN_LOSS_KEYS)}")
     criterion = CombinedLoss(
         w_l1=float(loss_cfg.get("w_l1", 0.0)), w_char=float(loss_cfg.get("w_char", 0.0)),
         w_lab=float(loss_cfg.get("w_lab", 0.0)), w_perc=float(loss_cfg.get("w_perc", 0.0)),
@@ -66,7 +77,14 @@ def train_nm(cfg: dict) -> dict:
         hi_gamma=float(loss_cfg.get("hi_gamma", 2.0)), w_dark=float(loss_cfg.get("w_dark", 0.0)),
         dark_thresh=float(loss_cfg.get("dark_thresh", 0.28)),
         w_color=float(loss_cfg.get("w_color", 0.0)), w_lc=float(loss_cfg.get("w_lc", 0.0)),
+        w_chroma=float(loss_cfg.get("w_chroma", 0.0)),   # <-- 02/08: truoc day THIEU
+        w_sharp=float(loss_cfg.get("w_sharp", 0.0)),     # <-- 02/08: truoc day THIEU
+        w_clip=float(loss_cfg.get("w_clip", 0.0)),       # <-- 02/08: truoc day THIEU
     ).to(device)
+    print("[loss] dang chay: " + ", ".join(
+        f"{k}={getattr(criterion, k):g}" for k in
+        ("w_l1", "w_char", "w_lab", "w_perc", "w_hi", "w_dark", "w_color", "w_lc",
+         "w_chroma", "w_sharp", "w_clip") if getattr(criterion, k, 0.0)), flush=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
     warmup = min(5, max(1, epochs // 10))

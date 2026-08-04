@@ -2,13 +2,23 @@ import cv2
 import numpy as np
 from .config import MAX_FEATURES, MIN_MATCH_COUNT, INLIER_THRESHOLD, MIN_INLIER_RATIO
 
-def extract_and_match(img1_gray, img2_gray):
-    """Trích xuất và so khớp keypoints sử dụng ORB."""
-    orb = cv2.ORB_create(MAX_FEATURES)
+def extract_and_match(img1_gray, img2_gray, max_features=None, min_match=None):
+    """Trích xuất và so khớp keypoints sử dụng ORB.
+
+    03/08: thêm `max_features`/`min_match` TUỲ CHỌN (None = giữ nguyên hằng số cũ,
+    nên mọi lời gọi sẵn có KHÔNG đổi hành vi). Lý do: khâu gộp bracket cần dò
+    feature RỘNG TAY hơn khâu ghép cặp before/after. Đo trên bracket thật
+    fp104505 — cùng bộ ảnh, chỉ khác tham số:
+        ORB 2000 / min 15 / RANSAC 5.0  -> khớp được 1/4 tấm, cửa sổ cháy 21.03%
+        ORB 4000 / min 12 / RANSAC 4.0  -> khớp được 4/4 tấm, cửa sổ cháy 14.47%
+    Tấm khớp được thì được NẮN đúng chỗ; tấm chỉ "cứu" thì giữ nguyên vị trí cũ.
+    """
+    orb = cv2.ORB_create(max_features or MAX_FEATURES)
+    _min = min_match or MIN_MATCH_COUNT
     kp1, des1 = orb.detectAndCompute(img1_gray, None)
     kp2, des2 = orb.detectAndCompute(img2_gray, None)
-    
-    if des1 is None or des2 is None or len(des1) < MIN_MATCH_COUNT or len(des2) < MIN_MATCH_COUNT:
+
+    if des1 is None or des2 is None or len(des1) < _min or len(des2) < _min:
         return None, None, None
         
     # Sử dụng BFMatcher với khoảng cách Hamming (vì ORB là binary descriptor)
@@ -37,7 +47,10 @@ def verify_and_align(before_path, after_path):
     
     # So khớp keypoints
     res = extract_and_match(gray_before, gray_after)
-    if res is None:
+    # 03/08 FIX: hàm trên trả về TUPLE (None, None, None) khi thất bại, nên phép
+    # kiểm `res is None` cũ KHÔNG BAO GIỜ đúng -> chạy tiếp rồi nổ `len(None)`.
+    # (ingest.py:96 đã tự vá bằng `matches is None`; đây là bản vá tại GỐC.)
+    if res is None or res[2] is None:
         return False, None, 0, None
         
     kp1, kp2, matches = res

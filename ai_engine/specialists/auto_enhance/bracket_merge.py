@@ -43,13 +43,36 @@ def _read_image(path: str) -> np.ndarray:
 
 
 def _align_homography_veto(imgs: list) -> list:
-    """Căn khớp các frame về frame tham chiếu bằng ORB+RANSAC homography;
-    frame không khớp được -> LOẠI (veto). Xấu nhất còn 1 frame tham chiếu.
+    """Căn khớp bracket — UY QUYEN cho ai_engine.data_pairing.ingest.
 
-    VÌ SAO (22/07/2026): AlignMTB chỉ chỉnh dịch nhỏ vài pixel — khách chụp
-    cầm tay lệch nhiều/xoay là Mertens gộp ra ẢNH MA chồng lớp (đã dính thật ở
-    ingest job k000, xem outputs/review_check_k000_*.jpg). Cùng fix với
-    data_pairing/ingest.py để 2 đường gộp hành xử giống nhau."""
+    ⭐ HOP NHAT 03/08 (luat L16). Truoc day file nay giu MOT BAN SAO cua thuat toan
+    trong `ingest.align_bracket_images`, va chu thich cu ngay day con ghi ro y dinh
+    *"Cung fix voi data_pairing/ingest.py de 2 duong gop hanh xu giong nhau"*.
+    Thuc te chung DA LECH NHAU — do tren cung bracket, cung anh:
+        fp104505   ingest 4/5 tam  |  bracket_merge 5/5
+        fp104525   ingest 5/5 tam  |  bracket_merge 2/5   <-- duong GIAO HANG mat 3 tam
+    Moi lan va lai phai nho va hai cho, va lan nao cung quen mot cho. Day la khuon
+    mau loi lon nhat cua du an (tasks/29, luat L16).
+    Nay chi con MOT ban cai dat: sua mot lan la ca hai duong doi theo.
+
+    Ban duy nhat nam o `ingest.align_bracket_images`, gom:
+      - chuan hoa do sang truoc khi SO SANH (tam toi luma ~1.7 van do duoc)
+      - cong HINH HOC tach DICH (AlignMTB sua duoc) khoi BIEN DANG (khong ai sua duoc)
+      - nguong hieu chinh tren 53 bracket that: giu 49/49 tam chan may, bat dung
+        10/10 ca xoay 0.5do / phong 1.005 / dich 60px
+    """
+    # import trong ham: ingest keo theo rawpy — khong bat duong giao hang phai nap
+    # no ngay luc import module.
+    from ai_engine.data_pairing.ingest import align_bracket_images
+    return align_bracket_images(imgs)
+
+
+def _ban_sao_cu(imgs: list) -> list:
+    """BAN SAO CU — khong con duong goi nao (xem _align_homography_veto o tren).
+
+    Giu lai DUNG MOT commit de doi chieu neu ban hop nhat co hoi quy, roi XOA.
+    Neu ban dang doc dong nay o commit sau 04/08/2026 thi no da qua han: xoa di.
+    """
     if len(imgs) <= 1:
         return imgs
 
@@ -59,22 +82,43 @@ def _align_homography_veto(imgs: list) -> list:
     ref = imgs[ref_i]
     h, w = ref.shape[:2]
     clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
-    gray_ref = clahe.apply(cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY))
+
+    # ⭐ FIX 03/08 — DONG BO voi ingest.align_bracket_images (luat L16: va phai ap
+    # cho CA N nhanh). Loi goc: cong veto so hai tam LECH NHAU 6+ KHAU PHOI SANG.
+    # Tam toi (luma TB ~1.7/255) co noi that DEN TUYET DOI, chi cua so sang; tam
+    # tham chieu thi nguoc lai. Hai tam gan nhu khong co cau truc chung -> ORB va
+    # edge-NCC deu that bai -> tam toi bi veto, MA DO LA TAM DUY NHAT GIU DUOC
+    # CANH NGOAI CUA SO. Do tren bracket that fp104505: giu 2/5 tam, vung cua so
+    # chay 52.41%; sau fix giu 5/5, chay con 21.03% (AutoHDR: 0.28%).
+    def _de_so(bgr):
+        """Dua mot tam ve thang do sang chung DE SO SANH (khong doi anh goc)."""
+        g = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        lo, hi = np.percentile(g, (1.0, 99.5))
+        if hi - lo >= 1.0:
+            g = np.clip((g - lo) * (255.0 / (hi - lo)), 0.0, 255.0)
+        return clahe.apply(g.astype(np.uint8))
+
+    gray_ref = _de_so(ref)
     orb = cv2.ORB_create(nfeatures=4000)
     kp_r, des_r = orb.detectAndCompute(gray_ref, None)
 
     def _edge_ncc(a_gray, b_gray):
-        ga = cv2.convertScaleAbs(cv2.Laplacian(a_gray, cv2.CV_32F))
-        gb = cv2.convertScaleAbs(cv2.Laplacian(b_gray, cv2.CV_32F))
+        # 03/08: dung normalize(MINMAX) nhu ingest.compute_edge_ncc. Ban cu dung
+        # convertScaleAbs — no CAT CUT bien do thay vi keo dan, nen tam co gradient
+        # nho (tam toi) tut xuong con vai muc xam va luon truot nguong 0.45.
+        lap = lambda g: cv2.normalize(np.abs(cv2.Laplacian(g, cv2.CV_32F)), None,
+                                      0, 255, cv2.NORM_MINMAX).astype(np.uint8)
+        ga, gb = lap(a_gray), lap(b_gray)
         return float(cv2.minMaxLoc(cv2.matchTemplate(ga, gb, cv2.TM_CCOEFF_NORMED))[1])
 
     max_shift = 0.25 * max(h, w)
-    gray_ref_full = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
     out = [ref]
+    dich_da_khop = []
+    da_nhan = {ref_i}
     for i, im in enumerate(imgs):
         if i == ref_i:
             continue
-        gray = clahe.apply(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY))
+        gray = _de_so(im)
         kp, des = orb.detectAndCompute(gray, None)
         if des is None or des_r is None or len(kp) < 12:
             continue
@@ -98,9 +142,38 @@ def _align_homography_veto(imgs: list) -> list:
             continue
         warped = cv2.warpAffine(im, M, (w, h), flags=cv2.INTER_LANCZOS4,
                                 borderMode=cv2.BORDER_REPLICATE)
-        if _edge_ncc(cv2.cvtColor(warped, cv2.COLOR_BGR2GRAY), gray_ref_full) < 0.45:
+        if _edge_ncc(_de_so(warped), gray_ref) < 0.45:
             continue
         out.append(warped)
+        dich_da_khop.append(shift)
+        da_nhan.add(i)
+
+    # CUU TAM BI LOAI KHI CHAN MAY DUNG YEN — y het ingest.align_bracket_images.
+    # Veto van CAN de chong anh ma (them 25/07); nen khong bo, chi phan biet
+    # "tam khac phoi sang" voi "may rung": neu cac tam DA KHOP deu dich rat it thi
+    # may dung yen -> tam bi loai cung dang o dung cho -> giu lai, de AlignMTB
+    # (bat bien do sang theo thiet ke) don not vai pixel con lai.
+    # Kiem hoi quy (ban ingest): chan may -> giu 5/5; xe 1 tam 60px -> giu 2/5;
+    # xe 2 tam hai huong -> giu 2/5. Chong anh ma con nguyen.
+    # SUA 03/08 (lan 2) — y het ingest: KHONG suy ra "may dung yen" tu cac tam khop
+    # duoc (tam bi xe khong khop duoc nen khong de lai bang chung, se bi cuu OAN —
+    # kiem hoi quy bat duoc: xe 1 tam 60px van giu 5/5). Nay DO TRUC TIEP tung tam.
+    NGUONG_CHAN_MAY = 3.0
+    bi_loai = [(k, imgs[k]) for k in range(len(imgs)) if k not in da_nhan]
+    if bi_loai:
+        ty = 1024.0 / max(h, w)
+        nho = lambda g: cv2.resize(g, (max(1, int(w * ty)), max(1, int(h * ty))),
+                                   interpolation=cv2.INTER_AREA).astype(np.float32)
+        ref_nho = nho(gray_ref)
+        for k, im in bi_loai:
+            (dx, dy), _ = cv2.phaseCorrelate(ref_nho, nho(_de_so(im)))
+            if float(np.hypot(dx, dy)) / ty <= NGUONG_CHAN_MAY:
+                out.append(im.copy())
+    if len(out) >= 2:
+        try:
+            cv2.createAlignMTB().process(out, out)
+        except cv2.error:
+            pass
     return out
 
 
@@ -129,12 +202,13 @@ def merge_brackets(paths: list, align: bool = True) -> np.ndarray:
     ]
 
     if align:
+        # FIX 04/08: BO luot AlignMTB o day. Sau khi hop nhat (03/08),
+        # _align_homography_veto uy quyen cho ingest.align_bracket_images — ma ham
+        # do DA chay AlignMTB o buoc cuoi. Giu them luot nay la chay HAI LAN.
+        # Khong chi ton thoi gian: MTB lam viec tren ban do nguong-trung-vi, neu
+        # luot 1 da dich tam nao >= 1 pixel thi ban do luot 2 KHAC di, nen no co
+        # the tinh ra dich khac 0 va them troi duoi-pixel. MTB KHONG idempotent.
         imgs = _align_homography_veto(imgs)
-        if len(imgs) >= 2:
-            try:
-                cv2.createAlignMTB().process(imgs, imgs)
-            except cv2.error as e:
-                print(f"[bracket_merge] CẢNH BÁO: align MTB lỗi ({e}), dùng ảnh gốc.")
 
     if len(imgs) == 1:
         print("[bracket_merge] CẢNH BÁO: các frame khác bị veto (lệch quá) — dùng 1 frame tham chiếu.")

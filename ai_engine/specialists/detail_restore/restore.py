@@ -86,6 +86,17 @@ def apply(img, params=None):
     restored = cv2.resize(up, (w, h), interpolation=cv2.INTER_AREA)
     sig = max(1.0, 0.0015 * min(h, w))
     low_res = cv2.GaussianBlur(restored, (0, 0), sigmaX=sig)
-    detail = restored - low_res                     # chi tiet SR moi them
-    out = img + strength * detail
+    detail = restored - low_res                     # dai tan cao cua ban SR
+
+    # FIX 02/08 — LOI DO DUOC: dong cu la `out = img + strength * detail`, tuc CONG
+    # dai tan cao cua ban SR LEN TREN dai tan cao VON CO cua anh goc => hai dai cong
+    # don, bien do tan cao x1.96 (Laplacian var x3.84) khi strength=1.0. Day la
+    # nguyen nhan SO HOC cua "net tho 1394 vs AutoHDR 619 = lam net qua tay gap doi"
+    # ghi trong SO_DIEM 01/08 — KHONG phai loi model.
+    # Y dinh ghi trong chu thich tren la "GHEP" (thay the) chu khong phai "CONG".
+    # Ghep dung = bo dai tan cao cua anh goc roi dat dai cua ban SR vao cho do:
+    #     strength=0 -> tra anh goc nguyen ven
+    #     strength=1 -> low_img + detail  (thay the hoan toan)
+    detail_img = img - cv2.GaussianBlur(img, (0, 0), sigmaX=sig)   # tan cao VON CO
+    out = img + strength * (detail - detail_img)
     return np.clip(out, 0.0, 1.0).astype(np.float32)

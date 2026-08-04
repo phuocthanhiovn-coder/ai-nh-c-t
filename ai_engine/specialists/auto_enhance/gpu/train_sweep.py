@@ -427,6 +427,27 @@ def train_one(cfg: dict) -> dict:
     # washout (lost saturation) more directly than a uniform w_lab bump, which
     # was already tried and barely helped. w_hi = highlight-protection weight.
     lab_weights = tuple(loss_cfg.get("lab_weights", (1.0, 1.0, 1.0)))
+
+    # ⚠️ CHONG TAI PHAM (02/08) — doc ky truoc khi them term loss moi.
+    # LOI NANG NHAT LICH SU DU AN: danh sach duoi day TRUOC DAY THIEU w_chroma,
+    # w_sharp, w_clip. Chung duoc khai trong tools/launch_*.py nhung khong duoc
+    # truyen vao -> CombinedLoss lay mac dinh 0.0 -> ba ham phat them vao de chua
+    # dung benh "nhat mau" (31/07) va "mo" (01/08) CHUA BAO GIO CHAY MOT LAN NAO,
+    # ma khong he co canh bao. Ta van do, van ket luan, van ghi vao SO_DIEM.
+    # => Moi ket luan A/B ve loss tu 25/07 den 01/08 deu VO HIEU.
+    # Tu nay: khoa la trong loss_cfg lam DUNG CHUONG TRINH, khong im lang bo qua.
+    _KNOWN_LOSS_KEYS = {
+        "w_l1", "w_char", "w_lab", "w_perc", "lab_weights", "w_hi", "hi_gamma",
+        "w_dark", "dark_thresh", "w_color", "w_lc", "w_chroma", "w_sharp", "w_clip",
+    }
+    _unknown = sorted(set(loss_cfg) - _KNOWN_LOSS_KEYS)
+    if _unknown:
+        raise ValueError(
+            f"loss_cfg co khoa la {_unknown}: CombinedLoss KHONG nhan chung nen "
+            f"chung se bi bo qua IM LANG (dung loi 25/07-01/08). Khoa hop le: "
+            f"{sorted(_KNOWN_LOSS_KEYS)}. Neu vua them term moi vao losses.py thi phai "
+            f"them ten no vao CA _KNOWN_LOSS_KEYS LAN loi goi CombinedLoss ngay duoi.")
+
     criterion = CombinedLoss(
         w_l1=float(loss_cfg.get("w_l1", 0.0)),
         w_char=float(loss_cfg.get("w_char", 0.0)),
@@ -439,7 +460,15 @@ def train_one(cfg: dict) -> dict:
         dark_thresh=float(loss_cfg.get("dark_thresh", 0.28)),
         w_color=float(loss_cfg.get("w_color", 0.0)),
         w_lc=float(loss_cfg.get("w_lc", 0.0)),
+        w_chroma=float(loss_cfg.get("w_chroma", 0.0)),   # <-- 02/08: truoc day THIEU
+        w_sharp=float(loss_cfg.get("w_sharp", 0.0)),     # <-- 02/08: truoc day THIEU
+        w_clip=float(loss_cfg.get("w_clip", 0.0)),       # <-- 02/08: truoc day THIEU
     ).to(device)
+    # In ra moi lan train de NHIN THAY loss that su dang chay, khong tin cau hinh.
+    print("[loss] dang chay: " + ", ".join(
+        f"{k}={getattr(criterion, k):g}" for k in
+        ("w_l1", "w_char", "w_lab", "w_perc", "w_hi", "w_dark", "w_color", "w_lc",
+         "w_chroma", "w_sharp", "w_clip") if getattr(criterion, k, 0.0)), flush=True)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     # torch 2.2.x compat: GradScaler lives under torch.cuda.amp (torch.amp.GradScaler is 2.3+)
     scaler = torch.cuda.amp.GradScaler(enabled=use_amp)
