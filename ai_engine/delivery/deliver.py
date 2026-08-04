@@ -132,7 +132,24 @@ def deliver_image(in_path, out_path, scene=None, opts=None):
     # 24/07: phan loai KHONG CHAC (conf<0.5) thi khong duoc quyen chan window_pull —
     # k001 (bep!) bi gan exterior_ground conf 0.296 -> mat window_pull -> chu che
     # "cua so khong thay cay". window_pull tu gate bang mask noi bo cua no.
-    allow_window_pull = (scene in ("interior", "general")) or scene_conf < 0.5
+    #
+    # ⭐ 04/08 (ra soat vong 7) — BAN VA 24/07 CHI BIT DUOC MOT NUA LO.
+    # No mo cong cho truong hop conf THAP, nhung scene_classify goi nham voi do tin
+    # cay CAO thi cong van dong. Chay classify tren ca 10 anh BENCH-10 full-res:
+    #   hr_fp104555  goc BEP (tu go + mat da den, khong mot manh troi) -> 0.865
+    #   hr_fp104600  PHONG TAM (guong + tu lavabo)                     -> 0.875
+    #   hr_fp104720  PHONG KHACH tran cao, cua so lon nhin ra cay      -> 0.537
+    # ca ba deu bi gan "exterior_ground" va MAT window_pull. Nguoc lai hr_fp104790
+    # (ngoai that THAT: mat tien nha + san co) chi duoc 0.469 nen window_pull VAN
+    # chay. Cong sai CA HAI CHIEU.
+    # Te hon nua: trong tin hieu cua classify co sky_fraction + horizon_present, nen
+    # anh cang co CUA SO LON thi cang de bi goi la ngoai that — tuc dung nhom anh CAN
+    # window_pull nhat lai la nhom bi chan nhieu nhat.
+    #
+    # Nay chi chan "aerial" (anh drone that su khong co cua so de keo). Moi truong hop
+    # con lai de window_pull tu quyet bang mask noi bo — dung nhu chu thich 24/07 da
+    # viet ma ban va khi do khong lam tron.
+    allow_window_pull = scene != "aerial"
 
     applied = []
 
@@ -151,13 +168,28 @@ def deliver_image(in_path, out_path, scene=None, opts=None):
         # 24/07: ha lua ca cum op (0.7->0.35...) — vong 5 chu cham: 3 op cung day
         # sang chong nhau -> "sang ma mo duc", goc o vang, cua so chay. Muc nhe =
         # sach truoc, phan con lai de CH_G hoc.
-        img = _run_op(img, "shadow_light", {"amount": 0.35})
-        applied.append(("shadow_light", {"amount": 0.35}))
-        # Bu 2 diem model con hut so AutoHDR (do 23/07, 4 vung chu khoanh):
-        # tuong trang hoi toi + mau decor nhat. vibrance = nang trang khong clip
-        # + day mau chon loc (accent-aware, san lon giu nha).
-        img = _run_op(img, "vibrance", {"whites": 0.45, "vibrance": 0.7, "dark_clean": 0.35})
-        applied.append(("vibrance", {"whites": 0.45, "vibrance": 0.7, "dark_clean": 0.35}))
+        # ⭐ 04/08 (ra soat vong 7) — DOC `model_complete` NHU brain/run.py DA LAM.
+        # Truoc day CHI brain doc khoa nay, nen duong deliver.py van chay ca cum op bu
+        # (shadow_light + vibrance/dark_clean) chong len CH_N. Do tren cung mot anh,
+        # cung checkpoint: brain p50 luma 176.1 / sat 19.1 vs deliver 185.5 / 21.8 —
+        # lech 9.72/255 va 90.3% so diem anh lech >8 muc. Tuc chu duyet anh o webapp
+        # roi giao khach bang deliver.py thi khach nhan mot tam KHAC HAN tam da duyet.
+        # CLAUDE.md 26/07 goi thang cum op nay la "THUOC DOC" voi model CH_N+ (den
+        # chay mat van, cua so phu mu — bang chung outputs/minimal_vs_full.jpg).
+        from ai_engine.orchestrator.ops_basic import model_complete as _model_complete
+        if _model_complete():
+            applied.append(("minimal-chain", {"ly_do": "model_complete=True -> bo cum "
+                                              "op bu, dong bo voi brain/run.py"}))
+        else:
+            # Thap sang goc khuat (flambient) — cai "nhat" chu/khach thay thuc chat la
+            # THIEU SANG vung toi, khong phai thieu mau (chroma Lab ta >= target, 23/07).
+            img = _run_op(img, "shadow_light", {"amount": 0.35})
+            applied.append(("shadow_light", {"amount": 0.35}))
+            # Bu 2 diem model con hut so AutoHDR (do 23/07, 4 vung chu khoanh):
+            # tuong trang hoi toi + mau decor nhat. vibrance = nang trang khong clip
+            # + day mau chon loc (accent-aware, san lon giu nha).
+            img = _run_op(img, "vibrance", {"whites": 0.45, "vibrance": 0.7, "dark_clean": 0.35})
+            applied.append(("vibrance", {"whites": 0.45, "vibrance": 0.7, "dark_clean": 0.35}))
         if allow_window_pull:
             img = _run_op(img, "window_pull", {"strength": 0.9, "saturation_boost": 0.45})
             applied.append(("window_pull", {"strength": 0.9}))

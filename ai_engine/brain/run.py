@@ -8,6 +8,7 @@ CLI:  python -m ai_engine.brain.run --in <anh> --out <anh_ra>
 """
 import argparse
 import json
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -29,14 +30,35 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     R = REGISTRY
     record = {"steps": []}
 
-    # do net dau vao -> chon profile
-    _g0 = cv2.cvtColor((np.clip(img, 0, 1) * 255).astype(np.uint8), cv2.COLOR_BGR2GRAY)
-    in_lap = cv2.Laplacian(_g0, cv2.CV_64F).var()
+    # ⭐ 04/08 (ra soat vong 7) — HAI LOI TRONG CONG PHUC NET.
+    #
+    # (1) DO NHAM ANH. `sharpen` quyet dinh co chay detail_restore o CUOI chuoi, nhung
+    #     lai duoc tinh tu anh DAU VAO. Bracket da gop thi luon sac (fp104505 lap 84.8)
+    #     nen cong luon ket luan "input sac, khong can phuc net" — trong khi chinh
+    #     MODEL o giua chuoi moi la thu pha net. Do o co anh khach nhan: vao 209 ->
+    #     ra 126, tuc mat 40% do net CUA CHINH ANH GOC, ma cong khong he hay biet.
+    #
+    # (2) NGUONG 80 CO GIAN THEO DO PHAN GIAI. Cung anh fp104790 do duoc 323.6
+    #     @full-res / 1124.0 @2048 / 1863.7 @1024 — chenh 5.8 lan. O 2048 ca 10/10 anh
+    #     BENCH-10 deu >=80 (profile "gentle"); o co giao that 6024 chi con 5/10, tuc
+    #     5 anh nhay sang profile "strong" — duong CHUA BAO GIO duoc tune o co do.
+    #
+    # Sua: do tren ban resize ve CANH DAI CO DINH (nguong moi co nghia that), va dua
+    # quyet dinh phuc net xuong SAU khi model chay, so anh RA voi anh VAO.
+    _LAP_RES = 1600
+
+    def _do_net(x):
+        g = cv2.cvtColor((np.clip(x, 0, 1) * 255).astype(np.uint8), cv2.COLOR_BGR2GRAY)
+        s = _LAP_RES / max(g.shape[:2])
+        if s < 1.0:
+            g = cv2.resize(g, None, fx=s, fy=s, interpolation=cv2.INTER_AREA)
+        return float(cv2.Laplacian(g, cv2.CV_64F).var())
+
+    in_lap = _do_net(img)
     sharp_input = in_lap >= 80.0
-    if sharpen is None:
-        sharpen = not sharp_input        # input da sac thi KHONG detail_restore
-    record["input_lap"] = round(float(in_lap), 1)
+    record["input_lap"] = round(in_lap, 1)
     record["profile"] = "gentle" if sharp_input else "strong"
+    _sharpen_ep = sharpen            # None = de chuoi tu quyet SAU khi model chay
 
     d0 = diagnose(img)                       # kham lan 1 (anh goc, co mat segment)
     record["diagnosis_before"] = {k: v for k, v in d0.items() if not k.startswith("_")}
@@ -46,12 +68,24 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     # cụm op bù (shadow_light/vibrance/dark_clean) thành CHỒNG LIỀU (đèn cháy,
     # cửa sổ mù — bằng chứng outputs/minimal_vs_full.jpg). Cờ model_complete
     # trong auto_enhance_config.json bật chuỗi TỐI GIẢN.
-    model_complete = False
-    try:
-        with open("checkpoints/auto_enhance_config.json", "r", encoding="utf-8") as _f:
-            model_complete = bool(json.load(_f).get("model_complete", False))
-    except Exception:
-        pass
+    # 04/08 (ra soat vong 7) — DUONG DAN TUYET DOI + BO except TRON.
+    # Ban cu doc bang duong dan TUONG DOI trong `try/except Exception: pass`. Chay tu
+    # bat ky cwd nao khac goc repo -> khong mo duoc file -> model_complete AM THAM ve
+    # False -> brain chay CHUOI DAY DU (shadow_light + vibrance + dark_clean) len
+    # model CH_N. Ma chinh CLAUDE.md ghi cum op do la "THUOC DOC" voi CH_N+: den chay
+    # mat van, cua so phu mu. Tuc chi doi thu muc chay la anh giao khach xau di, khong
+    # mot dong canh bao nao.
+    _CFG = Path(__file__).resolve().parents[2] / "checkpoints" / "auto_enhance_config.json"
+    if not _CFG.exists():
+        raise FileNotFoundError(
+            f"Khong thay {_CFG}. KHONG doan `model_complete=False` nua — doan sai la "
+            f"chay cum op bu len model CH_N+ (thuoc doc). Cau hinh sai phai dung may."
+        )
+    with open(_CFG, "r", encoding="utf-8") as _f:
+        _cfg = json.load(_f)
+    if "model_complete" not in _cfg:
+        raise KeyError(f"{_CFG} thieu khoa 'model_complete' — phai ghi ro True/False.")
+    model_complete = bool(_cfg["model_complete"])
     record["model_complete"] = model_complete
 
     out = R["denoise"]["fn"](img, {"denoise_strength": 0.35, "sharpen_amount": 0.0})
@@ -61,6 +95,25 @@ def process(img, sharpen=None, sharpen_strength=1.0):
 
     d1 = diagnose(out, with_masks=False)     # kham lan 2 (sau model)
     record["diagnosis_mid"] = {k: v for k, v in d1.items() if not k.startswith("_")}
+
+    # 04/08 — QUYET DINH PHUC NET O DAY, khong phai o dau chuoi (xem chu thich tren).
+    # Cau hoi dung la "MODEL co lam mem anh khong", chu khong phai "anh vao co sac
+    # khong". Do ca hai tren cung mot thang (canh dai 1600) nen so sanh duoc.
+    mid_lap = _do_net(out)
+    record["mid_lap"] = round(mid_lap, 1)
+    record["lap_ratio"] = round(mid_lap / in_lap, 3) if in_lap > 0 else None
+    if _sharpen_ep is None:
+        # Nguong 0.90: model lam mat >10% nang luong canh thi moi buoc phuc net.
+        sharpen = mid_lap < in_lap * 0.90
+        record["steps"].append({
+            "op": "quyet-dinh-phuc-net",
+            "reason": (f"net vao {in_lap:.0f} -> sau model {mid_lap:.0f} "
+                       f"({mid_lap / in_lap:.2f}x); "
+                       + ("model LAM MEM -> bat detail_restore" if sharpen
+                          else "model giu duoc net -> khong phuc net")),
+        })
+    else:
+        sharpen = bool(_sharpen_ep)
 
     # NAO v2 (25/07 dem): LIEU DATA-RUT-RA. Khai thac lieu toi uu tren 905 cap
     # (tools/mine_doses) roi hoc predictor tuyen tinh -> predictor CHI NGANG

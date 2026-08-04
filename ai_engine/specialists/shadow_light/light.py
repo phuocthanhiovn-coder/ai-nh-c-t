@@ -65,7 +65,25 @@ def apply(img, params=None):
     y = np.maximum(img @ _LUMA_W, _LOG_EPS)
     L = np.log2(y)
 
-    base = _guided(L, _RADIUS_FRAC * min(h, w), _GUIDED_EPS)
+    # ⭐ 04/08 (ra soat vong 7) — SAI THANG DO: bo loc guided chay tren log2-luma.
+    # `L = log2(y)` voi y in [_LOG_EPS, 1] nen L trai khoang 10 DON VI ([-9.97, 0]),
+    # trong khi `_GUIDED_EPS = 0.0004` la con so tune cho thang [0,1]. Voi guided
+    # filter, eps la nguong "coi chenh lech nay la NHIEU hay la CANH" — dat eps nho
+    # hon thang tin hieu 4 bac do lam bo loc bam sat tung chi tiet, tuc base = L va
+    # detail = 0. Do that: ti le detail/tin hieu = 0.0010 (gan bang khong).
+    # => Phep tach Retinex ma ca op nay dua vao KHONG HE XAY RA. Op suy bien thanh
+    #    mot phep bien doi tone toan cuc; MAE o amount=0.35 chi 0.0062.
+    # Chuan hoa L ve [0,1] truoc khi loc (dung cach harsh_sun da lam) roi nhan nguoc
+    # lai — do lai cho ti le detail 0.0109, gap ~11 lan.
+    #
+    # ⚠️ PHAI DOC: `_K_DARK_MIN`, `_BLACK_FLOOR` va lieu `sl=0.16` trong brain/run.py
+    # deu duoc tune KHI OP DANG SUY BIEN. Nay op chay dung thi cung mot lieu se manh
+    # hon truoc. Production hien tai KHONG bi anh huong (model_complete=True nen brain
+    # bo qua op nay), nhung duong `deliver.py --use-model` co goi shadow_light(0.35) —
+    # phai tune lai truoc khi dung duong do de giao hang.
+    _lo = float(L.min())
+    _rng = max(float(L.max()) - _lo, 1e-6)
+    base = _guided((L - _lo) / _rng, _RADIUS_FRAC * min(h, w), _GUIDED_EPS) * _rng + _lo
     detail = L - base
 
     anchor = np.percentile(base, _ANCHOR_PCT)

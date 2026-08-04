@@ -189,7 +189,12 @@ def process_image(bgr):
         nh = int(round(h * MAX_W / w))
         bgr = cv2.resize(bgr, (MAX_W, nh), interpolation=cv2.INTER_AREA)
     ai = apply_fullres(MODEL, bgr, DEVICE)
-    graded = grade_auto(ai)
+    # 04/08 (ra soat vong 7) — DOC `model_complete` NHU brain/run.py DA LAM.
+    # Truoc day chi brain doc khoa nay, nen webapp van chay grade_auto chong len
+    # model CH_N (do duoc: lech 2.33/255 so voi brain, 4.15% diem lech >8 muc).
+    # Chu duyet anh TREN WEBAPP roi giao khach bang duong khac -> khach nhan tam khac.
+    from ai_engine.orchestrator.ops_basic import model_complete as _model_complete
+    graded = ai if _model_complete() else grade_auto(ai)
     return bgr, graded
 
 

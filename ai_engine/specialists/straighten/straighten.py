@@ -317,6 +317,19 @@ def apply(img, params=None):
         flags=cv2.INTER_LANCZOS4,
         borderMode=cv2.BORDER_REPLICATE,
     )
+    # 04/08 (ra soat vong 7) — CLIP VE [0,1]: truoc day VI PHAM hop dong toan tu.
+    # INTER_LANCZOS4 co nhan AM nen sinh rung (overshoot/undershoot) o canh manh.
+    # Do tren 10 anh BENCH-10: 5/5 anh duoc nan deu ra ngoai dai — thap nhat -0.0764,
+    # cao nhat +1.1119, toi 64016 diem >1 tren mot anh.
+    # Hai tang hau qua da do duoc:
+    #   1. Op ke tiep (finish_detail / vibrance) clip CUNG -> vien trang/den bet quanh
+    #      canh manh.
+    #   2. Lam NO assert cua window_pull va sky_replace (hai loi rieng trong cung vong
+    #      ra soat) — tuc chinh ham NAY la nguon, hai cho kia chi la nan nhan.
+    # `conformance_check` khong bat duoc vi tren ANH NHIEU NGAU NHIEN straighten luon
+    # tra identity (khong co duong doc nao de nan) — dung canh bao tasks/30 muc F:
+    # 3/12 con chi chay duong identity nen hop dong khong he duoc kiem that.
+    np.clip(result, 0.0, 1.0, out=result)
     return (result, H_full) if return_h else result
 
 

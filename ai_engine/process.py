@@ -83,6 +83,19 @@ def process_folder(in_dir, out_dir, brackets=1, grade=True,
     model, device = load_model(ckpt, device)
     os.makedirs(out_dir, exist_ok=True)
 
+    # 04/08 (ra soat vong 7) — DOC `model_complete` TU MOT NGUON DUNG CHUNG.
+    # Truoc day chi brain/run.py doc khoa nay; process.py thi khong, nen no van chay
+    # `grade_auto` (preset indoor: sat 1.10, warm, contrast 1.02, clarity 0.22,
+    # black 2, sharpen 0.85) chong len model CH_N — dung cum op ma CLAUDE.md goi la
+    # "thuoc doc" voi model doi nay. Do duoc: anh ra lech 2.33/255 so voi brain,
+    # 4.15% so diem lech >8 muc. Nghia la chu duyet anh o mot duong roi giao khach
+    # bang duong khac thi khach nhan mot tam KHAC.
+    from ai_engine.orchestrator.ops_basic import model_complete as _model_complete
+    if grade and _model_complete():
+        print("[process] model_complete=True -> BO grade_auto (cum op bu tune cho "
+              "model doi cu, la thuoc doc voi CH_N+). Dong bo voi brain/run.py.")
+        grade = False
+
     n_ok, total_kb = 0, 0.0
 
     if brackets <= 1:

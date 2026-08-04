@@ -171,7 +171,13 @@ def apply(img, params=None):
     saturation_boost = float(np.clip(params.get("saturation_boost", 0.25), 0.0, 0.6))
 
     assert img.dtype in (np.float32, np.float64)
-    img = np.asarray(img, dtype=np.float32)
+    # 04/08 (ra soat vong 7): CLIP dau vao ve dung hop dong [0,1] TRUOC khi tinh.
+    # Truoc day op nem AssertionError "Pixel ngoai mask bi doi" khi anh vao co gia tri
+    # ngoai dai — dung trang thai ma `straighten` de lai (INTER_LANCZOS4 rung ra toi
+    # +1.1119 / -0.0764). Bien phap tan goc la bat straighten tra ve [0,1] (da lam
+    # trong cung vong ra soat nay); day la lop chan thu hai, vi op KHONG duoc do vo ca
+    # luot giao hang chi vi ben goi dua vao du lieu lech hop dong.
+    img = np.clip(np.asarray(img, dtype=np.float32), 0.0, 1.0)
     h, w = img.shape[:2]
 
     mask, win_fraction = detect_windows(img)

@@ -98,5 +98,25 @@ def apply(img, params=None):
     #     strength=0 -> tra anh goc nguyen ven
     #     strength=1 -> low_img + detail  (thay the hoan toan)
     detail_img = img - cv2.GaussianBlur(img, (0, 0), sigmaX=sig)   # tan cao VON CO
-    out = img + strength * (detail - detail_img)
+    # ⭐ 04/08 (ra soat vong 7) — BAN VA 02/08 CHUA "QUA TAY" THANH "THIEU TAY".
+    # Dong cu `out = img + strength*(detail - detail_img)` BO dai tan cao von co roi
+    # DAT dai cua ban SR vao cho. Nhung chinh chu thich dong 82-85 o tren da ghi: vong
+    # SR x4 -> INTER_AREA "hoat dong nhu bo KHU NHIEU (lap 29.8 -> 20.0 = -33%)".
+    # Vay o moi vung IT KET CAU, dai duoc dat vao YEU HON dai bi bo di => con "phuc
+    # net" thanh con LAM MEM. Do theo o 64px, strength=1.0, anh 1536x1024:
+    #     hr_fp104610: 63.0% so o bi lam mem   |  hr_fp104505: 58.6%
+    #     o phang nhat: chi con x0.05 nang luong canh (mat 95%)
+    #     dong CU (img + detail): 0.0% so o bi lam mem
+    # Ma op nay BAT MAC DINH o cuoi chuoi giao hang (brain/run.py goi voi
+    # sharpen_strength mac dinh 1.0) — tuc no lam mem chinh cai no sinh ra de chua.
+    #
+    # Sua: giu tinh than "GHEP, khong CONG" nhung KHONG BAO GIO duoc lam yeu di. Voi
+    # moi diem anh, lay dai nao co bien do LON HON:
+    #     |detail_SR| > |detail_goc| -> dung dai SR (that su co chi tiet moi)
+    #     nguoc lai                  -> giu nguyen dai goc (khong mat gi)
+    # Nho vay: strength=0 -> anh goc; strength=1 -> low_img + dai manh nhat; va
+    # |dai ket qua| >= |dai goc| o moi diem, nen VE MAT TOAN HOC op khong the lam mem.
+    manh_hon = np.abs(detail) > np.abs(detail_img)
+    detail_ghep = np.where(manh_hon, detail, detail_img)
+    out = img + strength * (detail_ghep - detail_img)
     return np.clip(out, 0.0, 1.0).astype(np.float32)

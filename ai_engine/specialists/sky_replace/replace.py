@@ -116,7 +116,11 @@ def apply(img, params=None):
     harmonize = bool(params.get("harmonize", True))
 
     assert img.dtype == np.float32 or img.dtype == np.float64
-    img = np.asarray(img, dtype=np.float32)
+    # 04/08 (ra soat vong 7): CLIP dau vao ve dung hop dong [0,1] TRUOC khi tinh —
+    # Y HET loi cua window_pull (hai nhanh song song cung mot khuyet diem, luat L16).
+    # Khong clip thi assert "Pixel ngoai mask bi doi" o cuoi ham NO khi anh vao lech
+    # dai, ma nguon lech la `straighten` (INTER_LANCZOS4 rung toi +1.1119 / -0.0764).
+    img = np.clip(np.asarray(img, dtype=np.float32), 0.0, 1.0)
     h, w = img.shape[:2]
 
     mask, sky_fraction = detect_sky(img)

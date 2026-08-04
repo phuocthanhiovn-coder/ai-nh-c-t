@@ -91,6 +91,16 @@ def deliver_bracket(paths: list, model, device, grade: bool = True) -> np.ndarra
     """1 bracket (list path) -> merge -> operator CH_C -> (grade) -> ảnh BGR uint8 full-res."""
     merged = merge_brackets(paths)
     ai = apply_fullres(model, merged, device)
+    # 04/08 (ra soat vong 7) — duong giao hang THU TU cung phai doc `model_complete`.
+    # Truoc day chi brain/run.py doc; bon duong con lai (process.py, webapp/app.py,
+    # delivery/deliver.py, file nay) deu khong -> bon duong cho BON ANH KHAC NHAU tu
+    # cung mot anh vao va cung mot checkpoint. grade_auto la cum op bu tune cho model
+    # doi cu; CLAUDE.md 26/07 goi no la "thuoc doc" voi CH_N+.
+    from ai_engine.orchestrator.ops_basic import model_complete as _model_complete
+    if grade and _model_complete():
+        print("[bracket_deliver] model_complete=True -> BO grade_auto (dong bo voi "
+              "brain/run.py)", flush=True)
+        return ai
     return grade_auto(ai, paths[0]) if grade else ai
 
 
