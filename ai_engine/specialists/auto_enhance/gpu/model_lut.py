@@ -58,7 +58,16 @@ class Image3DLUT(nn.Module):
         self.backbone = _Backbone(self.n_basis, backbone_res)
         # KHOI DAU DUNG IDENTITY: zero head weight + bias=[1,0,0] -> w=[1,0,0] moi anh
         # -> output = identity (basis[0]) tuyet doi. Hoc dan khoi day (on dinh nhu warm-start).
-        self.backbone.head.weight.data.zero_()
+        # ⭐ 04/08 (ra soat vong 7) — KHONG zero-init trong so head.
+        # Voi weight = 0 thi w = bias = [1,0,0] voi MOI anh, ma gradient toi basis[k]
+        # ti le voi w[k], nen basis[1] va basis[2] (2/3 so bang mau) nhan gradient
+        # BANG 0 o buoc dau — chung chi bat dau hoc sau khi w[1], w[2] roi khoi 0, va
+        # ca hai bang do lai khoi tao bang 0 nen dong gop van bang 0 mot thoi gian dai.
+        # Do la mot phan ly do CH_LUT bi UNDERFIT (val_l1 0.115, vet sang lech tuong,
+        # glow guong vang gat) trong thi nghiem 25/07.
+        # Nay khoi tao nhieu nho dung nhu model_nm.py da lam: van gan identity o buoc
+        # 0 (bias van [1,0,...]) nhung PHA DOI XUNG nen moi bang deu co gradient ngay.
+        nn.init.normal_(self.backbone.head.weight, 0.0, 0.02)
         self.backbone.head.bias.data.zero_()
         self.backbone.head.bias.data[0] = 1.0
 

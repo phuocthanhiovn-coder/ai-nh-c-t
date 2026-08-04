@@ -204,7 +204,14 @@ def sharp_tile_loss(pred, target, tiles=8, w_flat=2.0):
     under = F.relu(et - ep).mean()
 
     # ve 2 — phat san: vung phang ma pred cao tan hon target
-    over = (F.relu(lp - lt) * flat_m).sum() / flat_m.sum().clamp(min=1.0)
+    # ⭐ 04/08 (ra soat vong 7) — EP FP32 TRUOC KHI CONG DON.
+    # Duoi AMP (torch.cuda.amp.autocast) cac tensor nay la fp16, ma fp16 chi bieu dien
+    # toi 65504. `flat_m.sum()` tren mot batch crop 512x512 dem den hang tram nghin
+    # diem -> TRAN SO -> inf. Phep chia cho inf cho 0, nen `over` = 0 va ve CHONG SAN
+    # (chong lam net qua tay o vung phang) CHET HOAN TOAN — im lang, khong warning,
+    # loss van ra so dep. Ca tu so lan mau so deu phai tinh o fp32.
+    _fm = flat_m.float()
+    over = (F.relu(lp - lt).float() * _fm).sum() / _fm.sum().clamp(min=1.0)
     return under + w_flat * over
 
 

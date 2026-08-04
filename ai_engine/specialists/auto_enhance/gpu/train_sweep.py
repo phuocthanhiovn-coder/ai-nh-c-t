@@ -320,8 +320,19 @@ def _run_epoch(model, loader, device, criterion, optimizer, scaler, use_amp, tra
             tot_l1 += float(raw_l1.item()) * bs
             n += bs
 
-    denom = max(1, n)
-    return tot_loss / denom, tot_l1 / denom
+    # ⭐ 04/08 (ra soat vong 7) — TAP RONG PHAI LAM DUNG MAY, khong duoc tra 0.0.
+    # `max(1, n)` bien mot epoch KHONG CHAY MOT MAU NAO thanh loss = 0.0 — con so
+    # THAP NHAT co the — nen checkpoint cua epoch 1 lap tuc dung dau bang va khong
+    # epoch nao sau do thang duoc. Ket qua: "best val" cua ca luot train la mot con so
+    # bia, va model duoc chon la model chua hoc gi.
+    # Day dung khuon mau `.get(khoa, mac_dinh)` ma luat so 1 goi la cai bay giet du an:
+    # mot tinh huong SAI bi bien thanh mot gia tri HOP LE trong im lang.
+    if n == 0:
+        raise RuntimeError(
+            "Epoch khong chay duoc mau nao (n=0): tap rong hoac DataLoader loc sach. "
+            "KHONG tra loss=0.0 vi nhu vay checkpoint rong se dung dau bang."
+        )
+    return tot_loss / n, tot_l1 / n
 
 
 # ---------------------------------------------------------------------------
