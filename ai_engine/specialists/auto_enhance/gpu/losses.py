@@ -102,7 +102,11 @@ def colorfulness(img_bgr):
     b, g, r = img_bgr[:, 0], img_bgr[:, 1], img_bgr[:, 2]  # moi (N,H,W)
     rg = r - g
     yb = 0.5 * (r + g) - b
-    std_root = torch.sqrt(rg.var(dim=(1, 2)) + yb.var(dim=(1, 2)) + 1e-6)
+    # 04/08 (ra soat vong 7): unbiased=False. Mac dinh cua torch.var chia cho (n-1),
+    # nen anh chi co MOT diem cho var = NaN, va NaN lan ra ca loss lam hong luot train
+    # ma khong bao loi ro rang.
+    std_root = torch.sqrt(rg.var(dim=(1, 2), unbiased=False)
+                          + yb.var(dim=(1, 2), unbiased=False) + 1e-6)
     mean_root = torch.sqrt(rg.mean(dim=(1, 2)) ** 2 + yb.mean(dim=(1, 2)) ** 2 + 1e-6)
     return std_root + 0.3 * mean_root
 

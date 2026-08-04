@@ -135,9 +135,14 @@ def green_boost(img, mask, strength):
     hue, sat, val = hsv[:, :, 0], hsv[:, :, 1], hsv[:, :, 2]
 
     shift_amount = mask * strength
-    hue_diff = TARGET_HUE - hue
-    new_hue = hue + hue_diff * shift_amount * HUE_SHIFT_FRAC
-    new_hue = np.clip(new_hue, 0, 179)
+    # ⭐ 04/08 (ra soat vong 7) — HUE LA VONG TRON, khong phai truc thang.
+    # Trong OpenCV hue chay 0..179 va QUAY VONG (179 lien voi 0). Phep tru thang
+    # `TARGET_HUE - hue` di duong DAI khi hai mau nam hai phia diem quay vong: mot
+    # diem mau DO sat co (hue ~ 2) so voi TARGET_HUE ~ 60 cho hieu +58, tuc bi day
+    # qua CAM -> VANG; con neu hue ~ 175 thi hieu -115 va bi day nguoc ve HONG/TIM.
+    # Nay lay duong NGAN nhat tren vong tron va cho ket qua quay vong dung.
+    hue_diff = ((TARGET_HUE - hue + 90.0) % 180.0) - 90.0
+    new_hue = (hue + hue_diff * shift_amount * HUE_SHIFT_FRAC) % 180.0
 
     sat_gain = 1.0 + SAT_GAIN * shift_amount
     new_sat = sat * sat_gain

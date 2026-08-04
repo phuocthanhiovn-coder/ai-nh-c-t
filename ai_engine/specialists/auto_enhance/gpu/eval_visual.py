@@ -141,8 +141,14 @@ def run_pair(model, before_bgr, after_bgr, device, proc_width, use_autocast):
         after_bgr = cv2.resize(after_bgr, (before_bgr.shape[1], before_bgr.shape[0]),
                                interpolation=cv2.INTER_AREA)
 
-    before_rgb = cv2.cvtColor(before_bgr, cv2.COLOR_BGR2RGB)
-    full = torch.from_numpy(before_rgb.transpose(2, 0, 1).copy()).float().unsqueeze(0) / 255.0
+    # ⭐ 04/08 (ra soat vong 7) — DUA BGR THANG, khong doi sang RGB.
+    # HDRNetV2 HOC BGR (CropPairDataset tra BGR, train_sweep khong dao kenh) — chinh
+    # CLAUDE.md ghi "V2 an BGR THANG". Ban cu doi sang RGB truoc khi nap, tuc file nay
+    # cham MOT HAM KHAC voi ham thuc su di giao hang. Do duoc: lech L1 0.0737, LON HON
+    # ca sai so cua model (0.0720) — nghia la ban than phep cham sai nhieu hon khoang
+    # cach ma no dang do. eval_box.py:45 da lam dung va con ghi ro chu thich
+    # "KHONG chuyen RGB; train_sweep train o BGR" (luat L16: hai nhanh, mot dung mot sai).
+    full = torch.from_numpy(before_bgr.transpose(2, 0, 1).copy()).float().unsqueeze(0) / 255.0
     full = full.to(device)
     proxy = HDRNetV2.make_proxy(full, model.proxy_res)
 
@@ -154,9 +160,9 @@ def run_pair(model, before_bgr, after_bgr, device, proc_width, use_autocast):
         else:
             out, _ = model(proxy, full)
 
-    out_rgb = (out.squeeze(0).clamp(0, 1).cpu().permute(1, 2, 0).numpy() * 255.0)
-    out_rgb = out_rgb.astype(np.uint8)
-    out_bgr = cv2.cvtColor(out_rgb, cv2.COLOR_RGB2BGR)
+    # 04/08: dau vao la BGR (xem tren) nen dau ra cung la BGR — bo phep doi kenh.
+    out_bgr = (out.squeeze(0).clamp(0, 1).cpu().permute(1, 2, 0).numpy() * 255.0
+               ).astype(np.uint8)
 
     # Metrics on CPU tensors, BGR [0,1] (Lab helper expects BGR order).
     out_t = torch.from_numpy(out_bgr.transpose(2, 0, 1).copy()).float().unsqueeze(0) / 255.0

@@ -68,7 +68,9 @@ def agg(rows):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", required=True)
-    ap.add_argument("--data-dir", default="data")
+    # 04/08 (ra soat vong 7): mac dinh cu la "data" — thu muc do khong ton tai nen
+    # script chet ngay khi chay khong tham so.
+    ap.add_argument("--data-dir", default="data/pairs")
     ap.add_argument("--n", type=int, default=97)
     args = ap.parse_args()
 

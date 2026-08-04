@@ -29,6 +29,6 @@ class SRVGGNetCompact(nn.Module):
         for layer in self.body:
             out = layer(out)
         out = self.upsampler(out)
-        # residual: bilinear-upsample dau vao roi cong (nhu Real-ESRGAN compact)
+        # residual: nearest-upsample (04/08: chu thich cu ghi 'bilinear', ma dung mode='nearest') dau vao roi cong (nhu Real-ESRGAN compact)
         base = F.interpolate(x, scale_factor=self.upscale, mode="nearest")
         return out + base

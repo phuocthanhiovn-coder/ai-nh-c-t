@@ -86,15 +86,40 @@ def main():
             all_ok = all_ok and size_ok
             qc_after = qc_score(out_u8.astype(np.float32) / 255.0)
             panel(in_u8, out_u8, os.path.join(OUT_DIR, f"compare_{tag}_{name}"))
-            if tag == "B_with_model" and ("washed_out" in qc_after["flags"] or qc_after["needs_human"]):
-                qc_catches_washout = True
+            # ⭐ 04/08 (ra soat vong 7) — TIEU CHI CU BI NGUOC.
+            # Ban cu dat `qc_catches_washout = True` khi CHINH OUTPUT CUA MODEL bi QC
+            # gan co washed_out, roi bat buoc co do phai True thi bai kiem moi PASS.
+            # Tuc bai kiem nay chi PASS KHI MODEL LAM HONG ANH — no do vinh vien ke tu
+            # khi model tot len (bao cao "QC bat washout: FAIL" hien nay chinh la no).
+            # Do nham hai viec vao mot: (1) noi day chuoi co chay khong, (2) QC co nhay
+            # khong. Nay tach: phan (1) van dung anh that o day; phan (2) kiem bang mot
+            # anh BECH CO Y o duoi, khong phu thuoc checkpoint dang cai.
+            pass
             print(f"    [{tag}] op={info['applied']}")
             print(f"        size {'OK' if size_ok else 'SAI'} | QC {qc_before['overall']:.1f}->{qc_after['overall']:.1f} "
                   f"| flags={qc_after['flags']} | needs_human={qc_after['needs_human']}")
 
+    # ⭐ 04/08 (ra soat vong 7) — DO NHAY CUA QC bang ANH BECH CO Y, khong bang
+    # output cua model production. Anh tong hop nay BIET TRUOC la bech (nen len 0.80,
+    # bien do chi con 0.15) nen QC BAT BUOC phai bat; va no khong doi khi model doi,
+    # nen bai kiem khong con tu hong moi lan model tot len.
+    qc_catches_washout = False
+    try:
+        base = cv2.imread(SAMPLES[0] if isinstance(SAMPLES, (list, tuple)) else SAMPLES,
+                          cv2.IMREAD_COLOR)
+    except Exception:
+        base = None
+    if base is None:
+        base = (np.random.RandomState(0).rand(256, 384, 3) * 255).astype(np.uint8)
+    bech = np.clip(base.astype(np.float32) / 255.0 * 0.15 + 0.80, 0.0, 1.0)
+    qc_bech = qc_score(bech)
+    qc_catches_washout = ("washed_out" in qc_bech["flags"]) or qc_bech["needs_human"]
+
     print("-" * 66)
     print(f"  Khung xuong wiring : {'PASS - moi manh khop, chay end-to-end, size giu nguyen' if all_ok else 'FAIL'}")
-    print(f"  QC bat washout     : {'PASS - QC flag output model chua chin la washed_out/needs_human' if qc_catches_washout else 'FAIL - QC van bi lua!'}")
+    print(f"  QC bat anh bech    : {'PASS' if qc_catches_washout else 'FAIL - QC van bi lua!'}"
+          f"  (anh tong hop biet truoc la bech: flags={qc_bech['flags']}, "
+          f"needs_human={qc_bech['needs_human']}, overall={qc_bech['overall']:.1f})")
     return all_ok and qc_catches_washout
 
 

@@ -378,11 +378,19 @@ def main():
     ap.add_argument("--in", dest="inp", required=True, help="File anh hoac folder listing")
     ap.add_argument("--out", dest="out", required=True, help="File hoac folder output")
     ap.add_argument("--png", action="store_true", help="Xuat PNG thay vi JPEG q100")
+    # ⭐ 04/08 (ra soat vong 7) — DAO MAC DINH: BAT model.
+    # Chu thich "mac dinh TAT vi con washout" viet tu thoi CH_E (18/07) va da QUA HAN
+    # NAM DOI MODEL (CH_F, CH_M2, CH_N...). Hau qua: chay `deliver.py` khong co co thi
+    # KHONG con model nao trong chuoi ca — tuc CH_N, ban duy nhat dang ban, khong bao
+    # gio den duong giao hang nay. Moi cai tien tu 22/07 den nay deu khong toi khach
+    # neu ho dung lenh mac dinh.
+    ap.add_argument("--no-model", dest="no_model", action="store_true",
+                    help="TAT auto_enhance (chi chay chuoi deterministic). Mac dinh la BAT.")
     ap.add_argument("--use-model", action="store_true",
-                    help="Them auto_enhance (model hoc) — mac dinh TAT vi con washout")
+                    help="(giu lai cho tuong thich lenh cu — nay da la mac dinh)")
     args = ap.parse_args()
 
-    opts = {"png": args.png, "use_model": args.use_model}
+    opts = {"png": args.png, "use_model": not args.no_model}
 
     if os.path.isdir(args.inp):
         results = deliver_folder(args.inp, args.out, opts)

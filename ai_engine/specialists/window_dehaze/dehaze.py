@@ -41,9 +41,12 @@ def _airlight(img, dark):
 def apply(img, params=None):
     params = params or {}
     strength = float(np.clip(params.get("strength", 0.7), 0.0, 1.0))
-    img = np.clip(np.asarray(img, dtype=np.float32), 1e-4, 1.0)
+    # 04/08 (ra soat vong 7): kiem strength TRUOC khi ap san 1e-4. Ban cu clip len
+    # roi moi kiem, nen voi strength=0 anh tra ve van khac anh vao o moi diem co gia
+    # tri < 1e-4 (vung den tit) — vi pham hop dong "0 = khong lam gi".
     if strength == 0.0:
-        return img
+        return np.asarray(img, dtype=np.float32).copy()
+    img = np.clip(np.asarray(img, dtype=np.float32), 1e-4, 1.0)
 
     dark = _dark_channel(img, _PATCH)
     A = np.clip(_airlight(img, dark), 0.3, 1.0)          # airlight không quá tối

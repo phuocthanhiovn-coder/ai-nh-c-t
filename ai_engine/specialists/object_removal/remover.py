@@ -120,10 +120,17 @@ def apply(img, params=None):
 
     lama = _get_lama()
     t0 = time.time()
-    result_pil = lama(crop_u8, crop_mask)
+    # ⭐ 04/08 (ra soat vong 7) — LaMa HOC RGB, ta dang cho no an BGR.
+    # `crop_u8` la BGR (chuan cua ca pipeline) nhung simple-lama khong tu doi kenh,
+    # nen model nhan anh DAO KENH DO/XANH-DUONG. Ket qua vung lap vao lech mau so voi
+    # xung quanh — dung trieu chung "mieng va khong khop mau" ma tasks/30 muc D11 ghi.
+    result_pil = lama(cv2.cvtColor(crop_u8, cv2.COLOR_BGR2RGB), crop_mask)
     elapsed = time.time() - t0
 
-    result_bgr = np.asarray(result_pil).astype(np.float32) / 255.0
+    # 04/08: LaMa nhan RGB (xem tren) nen tra ve RGB -> doi NGUOC lai BGR truoc khi
+    # ghep vao anh nen. Thieu buoc nay thi vung lap vao bi dao kenh do/xanh-duong.
+    result_bgr = cv2.cvtColor(np.asarray(result_pil), cv2.COLOR_RGB2BGR
+                              ).astype(np.float32) / 255.0
     # simple-lama pads noi bo len boi so cua 8 va KHONG crop lai ve size goc
     # -> tu cat lai dung kich thuoc crop truoc khi paste.
     result_bgr = result_bgr[: crop_bgr.shape[0], : crop_bgr.shape[1]]

@@ -10,6 +10,7 @@ ensure_skies() -> dict{name: path}
 import os
 
 import cv2
+import zlib
 import numpy as np
 
 cv2.setNumThreads(2)
@@ -24,7 +25,7 @@ PLATE_NAMES = ("blue", "golden", "dusk", "hazy")
 
 
 def _seed_for(name):
-    return hash(name) & 0xFFFF
+    return zlib.crc32(name.encode())   # 04/08: hash() cua Python co PYTHONHASHSEED ngau nhien -> khong tat dinh giua cac tien trinh, trai voi docstring & 0xFFFF
 
 
 def _lowfreq_noise(rng, h, w, octaves=(8, 16, 32)):

@@ -368,6 +368,28 @@ def train_one(cfg: dict) -> dict:
     lr = float(cfg.get("lr", 3e-4))
     crop = int(cfg.get("crop", 512))
     proxy_res = int(cfg.get("proxy_res", 256))
+    # ⭐ 04/08 (ra soat vong 7) — CONG KHOA LA cho cfg TONG.
+    # Ban va truoc chi gac `cfg["loss"]`, con cfg tong van doc bang `.get()` tran cho
+    # ca 34 khoa. Nghia la mot khoa go sai o cap tren (vd "epoch" thay vi "epochs",
+    # hay "save_every" ma khong noi nao cai dat) bi BO QUA im lang va gia tri MAC DINH
+    # duoc dung — thi nghiem chay khac han y dinh ma bang diem van ra so dep.
+    # Danh sach duoi day rut tu chinh ma nguon ham nay (34 khoa).
+    _KHOA_HOP_LE = {
+        "amp", "batch_size", "cache_cap", "cache_ram", "crop", "dark_thresh",
+        "data_dir", "device", "epochs", "grid_bins", "grid_size", "hi_gamma",
+        "init_ckpt", "lab_weights", "loss", "lr", "num_workers", "out", "proxy_res",
+        "run_name", "seed", "val_frac", "w_char", "w_chroma", "w_clip", "w_color",
+        "w_dark", "w_hi", "w_l1", "w_lab", "w_lc", "w_perc", "w_sharp", "width",
+        "guidance", "name",
+    }
+    _la = set(cfg) - _KHOA_HOP_LE
+    if _la:
+        raise KeyError(
+            f"cfg co khoa LA {sorted(_la)} — train_sweep khong doc chung, nen chung se "
+            f"bi BO QUA im lang va thi nghiem chay khac y dinh. Khoa hop le: "
+            f"{sorted(_KHOA_HOP_LE)}"
+        )
+
     seed = int(cfg.get("seed", 42))
     val_frac = float(cfg.get("val_frac", DEFAULT_VAL_FRAC))
     num_workers = int(cfg.get("num_workers", 0))
