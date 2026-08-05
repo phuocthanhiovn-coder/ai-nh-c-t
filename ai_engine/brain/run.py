@@ -90,6 +90,16 @@ def process(img, sharpen=None, sharpen_strength=1.0):
 
     out = R["denoise"]["fn"](img, {"denoise_strength": 0.35, "sharpen_amount": 0.0})
     record["steps"].append({"op": "denoise", "reason": "khu nhieu truoc model"})
+    # ⭐ 04/08 (sua lai trong ngay) — MOC SO SANH PHAI DO SAU DENOISE.
+    # Ban va sang nay so `mid_lap` (sau model) voi `in_lap` (do tren ANH GOC), nhung
+    # `denoise` chay TRUOC model va tu no da an mat mot phan do net. Nen ti so
+    # mid_lap/in_lap gom CA phan denoise, trong khi nguong lai la 0.90 — dung bang muc
+    # ma rieng denoise gay ra. Ket qua: quy nham thu pham cho model, va bat
+    # `detail_restore` (op nang nhat chuoi, ~8 phut/5MP tren CPU) trong khi theo ghi
+    # chep 01/08 no doi lay 0.17->0.42 chi tiet nhung MAT 5.3 diem sang + 1.6 diem mau
+    # (vi pham L11). Nay lay moc NGAY SAU denoise de ti so chi phan anh phan MODEL.
+    lap_sau_denoise = _do_net(out)
+    record["lap_sau_denoise"] = round(lap_sau_denoise, 1)
     out = R["auto_enhance"]["fn"](out, {})
     record["steps"].append({"op": "auto_enhance", "reason": "mau/tone (model CH hien hanh)"})
 
@@ -101,15 +111,19 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     # khong". Do ca hai tren cung mot thang (canh dai 1600) nen so sanh duoc.
     mid_lap = _do_net(out)
     record["mid_lap"] = round(mid_lap, 1)
-    record["lap_ratio"] = round(mid_lap / in_lap, 3) if in_lap > 0 else None
+    # 04/08 (sua lai trong ngay): moc la ban SAU DENOISE, khong phai anh goc — xem
+    # chu thich o cho tinh `lap_sau_denoise`.
+    _moc = lap_sau_denoise
+    record["lap_ratio"] = round(mid_lap / _moc, 3) if _moc > 0 else None
     if _sharpen_ep is None:
-        # Nguong 0.90: model lam mat >10% nang luong canh thi moi buoc phuc net.
-        sharpen = mid_lap < in_lap * 0.90
+        # Nguong 0.90: RIENG MODEL lam mat >10% nang luong canh thi moi phuc net.
+        sharpen = mid_lap < _moc * 0.90
         record["steps"].append({
             "op": "quyet-dinh-phuc-net",
-            "reason": (f"net vao {in_lap:.0f} -> sau model {mid_lap:.0f} "
-                       f"({mid_lap / in_lap:.2f}x); "
-                       + ("model LAM MEM -> bat detail_restore" if sharpen
+            "reason": (f"net anh goc {in_lap:.0f} -> sau denoise {_moc:.0f} "
+                       f"-> sau model {mid_lap:.0f} "
+                       f"(rieng model {mid_lap / _moc:.2f}x); "
+                       + ("MODEL lam mem -> bat detail_restore" if sharpen
                           else "model giu duoc net -> khong phuc net")),
         })
     else:
@@ -206,9 +220,11 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     # `window_pull` o `elif` ben duoi tro thanh MA CHET, vi mask rong luon khac None.
     # Nguong 35%: cua so that hiem khi chiem qua 1/3 khung anh noi that; qua muc do
     # thi gan nhu chac chan la mat bat nham.
+    _mask_bi_bo = False
     if win_mask_gsam is not None:
         _frac = float(win_mask_gsam.mean())
         if _frac > 0.35:
+            _mask_bi_bo = True
             record["steps"].append({
                 "op": "eye:gsam-window:BO",
                 "frac": round(_frac, 4),
@@ -219,7 +235,17 @@ def process(img, sharpen=None, sharpen_strength=1.0):
     if win_mask_gsam is not None:
         record["steps"].append({"op": "eye:gsam-window",
                                 "frac": round(float(win_mask_gsam.mean()), 4)})
-    elif not sharp_input and (d0.get("frac_window", -1.0) >= 0.01 or d0.get("frac_window", -1.0) < 0.0):
+    # ⭐ 04/08 (sua lai trong ngay) — BO DIEU KIEN `not sharp_input`.
+    # Do net cua ANH VAO khong lien quan gi den chuyen cua so co can xu ly hay khong.
+    # Ma anh giao hang that (bracket da gop, full-res) LUON sac: do duoc 102.0 va
+    # 183.8 tren hai anh that, deu >= 80 => `sharp_input` luon True => than nhanh nay
+    # CHUA BAO GIO chay tren dung loai anh di giao khach.
+    # Hau qua ket hop voi cong 35% them sang nay: khi mat gsam bat nham (mask phu
+    # ~100%) thi mask bi bo dung nhu thiet ke, nhung sau do KHONG duong nao xu ly cua
+    # so — khong window_pull, khong window_recover — va khong mot dong canh bao.
+    # Tuc ban va chan mot loi roi de lai mot lo khac to hon.
+    elif _mask_bi_bo or (d0.get("frac_window", -1.0) >= 0.01
+                         or d0.get("frac_window", -1.0) < 0.0):
         s = round(min(0.95, 0.5 + max(d0.get("frac_window", 0.1), 0.1) * 2.5), 2)
         out = R["window_pull"]["fn"](out, {"strength": s, "saturation_boost": 0.5})
         record["steps"].append({"op": "window_pull(fallback)", "strength": s})

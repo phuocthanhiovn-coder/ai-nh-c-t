@@ -7,6 +7,12 @@ import csv
 import os
 import time
 
+import numpy as np      # 04/08: BAT BUOC — khoi gieo seed o train_lut() dung np.random.
+                        # Thieu dong nay thi train_lut() nem NameError ngay dong thu 4,
+                        # TRUOC khi doc cfg. Loi do chinh ban va "gieo seed" 04/08 gay
+                        # ra: khoi do duoc chep tu train_nm.py (file DO co import numpy)
+                        # sang day ma khong kiem lai import — dung khuon mau L16 ma
+                        # chinh vong ra soat nay di sua cho cho khac.
 import torch
 from torch.utils.data import DataLoader
 

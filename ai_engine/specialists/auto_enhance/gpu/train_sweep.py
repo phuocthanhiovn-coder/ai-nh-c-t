@@ -381,6 +381,15 @@ def train_one(cfg: dict) -> dict:
         "run_name", "seed", "val_frac", "w_char", "w_chroma", "w_clip", "w_color",
         "w_dark", "w_hi", "w_l1", "w_lab", "w_lc", "w_perc", "w_sharp", "width",
         "guidance", "name",
+        # ⭐ 04/08 (sua lai trong ngay) — "save_every" PHAI nam trong tap nay.
+        # Cong khoa-la them sang nay lam CHET 12 launcher train (launch_chf/chg/chh/
+        # chi/chj/chk/chm/chm2/chn/cho/finetune/nm) vi tat ca deu khai `save_every` —
+        # KE CA launch_chn.py, tuc cong thuc tai lap CH_N DANG CHAY PRODUCTION.
+        # Mot ban va chong-loi-im-lang lai tu tao ra mot loi ON AO chan het viec.
+        # Khoa nay la tan du tu trainer doi cu: train_gpu.py:315 CO cai dat no, con
+        # train_sweep thi KHONG. Nhan khoa de launcher chay duoc, nhung PHAI noi to la
+        # no bi bo qua — im lang bo qua chinh la cai bay dang di sua.
+        "save_every",
     }
     _la = set(cfg) - _KHOA_HOP_LE
     if _la:
@@ -389,6 +398,10 @@ def train_one(cfg: dict) -> dict:
             f"bi BO QUA im lang va thi nghiem chay khac y dinh. Khoa hop le: "
             f"{sorted(_KHOA_HOP_LE)}"
         )
+    if "save_every" in cfg:
+        print(f"[!] cfg co 'save_every'={cfg['save_every']} nhung train_sweep KHONG cai "
+              f"dat luu checkpoint dinh ky (chi train_gpu.py doi cu co). Se CHI luu ban "
+              f"tot nhat + ban cuoi. Dung trong cho co checkpoint giua chung.", flush=True)
 
     seed = int(cfg.get("seed", 42))
     val_frac = float(cfg.get("val_frac", DEFAULT_VAL_FRAC))
