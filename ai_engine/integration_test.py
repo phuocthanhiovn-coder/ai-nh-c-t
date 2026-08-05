@@ -104,13 +104,19 @@ def main():
     # bien do chi con 0.15) nen QC BAT BUOC phai bat; va no khong doi khi model doi,
     # nen bai kiem khong con tu hong moi lan model tot len.
     qc_catches_washout = False
-    try:
-        base = cv2.imread(SAMPLES[0] if isinstance(SAMPLES, (list, tuple)) else SAMPLES,
-                          cv2.IMREAD_COLOR)
-    except Exception:
-        base = None
+    # ⭐ 04/08 (sua lai trong ngay) — BAN VA SANG NAY DUNG TEN KHONG TON TAI.
+    # Toi viet `SAMPLES[0]` nhung bien `SAMPLES` KHONG HE duoc dinh nghia trong file
+    # nay (danh sach anh that nam o `picks`, dung tu dong 57-70). NameError do bi
+    # chinh `except Exception` cua toi nuot -> `base = None` -> roi ve ANH NHIEU NGAU
+    # NHIEN. Tuc bai kiem do nhay QC dang cham tren NHIEU chu khong phai anh chup, va
+    # no PASS vi ly do SAI: khong chung minh duoc QC bat duoc ANH THAT bi bech.
+    # Dung khuon mau "fallback im lang" ma ca vong ra soat nay di sua.
+    base = cv2.imread(picks[0], cv2.IMREAD_COLOR) if picks else None
     if base is None:
-        base = (np.random.RandomState(0).rand(256, 384, 3) * 255).astype(np.uint8)
+        raise RuntimeError(
+            "Khong doc duoc anh mau de kiem do nhay QC. KHONG roi ve anh nhieu ngau "
+            "nhien — lam vay bai kiem se PASS ma khong chung minh duoc gi."
+        )
     bech = np.clip(base.astype(np.float32) / 255.0 * 0.15 + 0.80, 0.0, 1.0)
     qc_bech = qc_score(bech)
     qc_catches_washout = ("washed_out" in qc_bech["flags"]) or qc_bech["needs_human"]
