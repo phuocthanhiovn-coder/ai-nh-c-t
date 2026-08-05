@@ -198,6 +198,24 @@ def process(img, sharpen=None, sharpen_strength=1.0):
                                 "reason": f"scene={d0['scene']}", "applied": _H is not None})
     _before_u8 = (np.clip(img, 0, 1) * 255).astype(np.uint8)
     win_mask_gsam = get_window_mask(_before_u8)
+    # ⭐ 04/08 (ra soat vong 7) — CONG LANH MANH CHO MASK "MAT".
+    # Grounding DINO co the tra ve mot box phu GAN TRON KHUNG HINH tren anh KHONG co
+    # cua so nao (no van co gang khop prompt "window"). Khi do mask phu ~100% va moi
+    # thao tac "theo vung cua so" bien thanh thao tac TOAN ANH — dung loai loi ma
+    # nguyen tac "tay theo vung" sinh ra de tranh. Nghiem trong hon: nhanh du phong
+    # `window_pull` o `elif` ben duoi tro thanh MA CHET, vi mask rong luon khac None.
+    # Nguong 35%: cua so that hiem khi chiem qua 1/3 khung anh noi that; qua muc do
+    # thi gan nhu chac chan la mat bat nham.
+    if win_mask_gsam is not None:
+        _frac = float(win_mask_gsam.mean())
+        if _frac > 0.35:
+            record["steps"].append({
+                "op": "eye:gsam-window:BO",
+                "frac": round(_frac, 4),
+                "reason": f"mask phu {_frac*100:.0f}% khung hinh > 35% -> gan nhu chac "
+                          f"chan mat bat nham, bo mask va de nhanh du phong chay",
+            })
+            win_mask_gsam = None
     if win_mask_gsam is not None:
         record["steps"].append({"op": "eye:gsam-window",
                                 "frac": round(float(win_mask_gsam.mean()), 4)})

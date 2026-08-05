@@ -297,8 +297,19 @@ def main():
         print(f"  Epoch {epoch:04d}/{args.epochs:04d} | train_l1={train_loss:.6f} "
               f"val_l1={val_loss:.6f} lr={lr:.6e} time={elapsed:.2f}s")
 
+        # ⚠️ 04/08 (ra soat vong 7) — CHECKPOINT NAY CHON BANG L1 THUAN.
+        # Luat so 3 trong BAN_GIAO: "KHONG chon checkpoint theo L1/PSNR — co dinh ly
+        # (CVPR 2018) chung minh no chon ban MO". L1 la ky vong co dieu kien nen ban
+        # thang luon la ban an toan/nhat/mo nhat — dung tat "mau nhat, anh bot" ma chu
+        # che nhieu vong. File nay la trainer DOI CU (da duoc thay bang gpu/train_sweep)
+        # nhung con chay duoc, nen phai NOI RO thay vi de nguoi dung tuong `_best` la
+        # ban tot nhat.
         is_best = val_loader is not None and val_loss < best_val
         if is_best:
+            if best_val == float("inf"):
+                print("  [!] CANH BAO: file nay chon `_best` bang L1 THUAN — vi pham "
+                      "luat so 3. KHONG dung ban `_best` de xep hang model; cham bang "
+                      "metrics.do_ba_truc + mat chu (cham mu).", flush=True)
             best_val = val_loss
 
         if epoch % args.save_every == 0 or epoch == args.epochs or is_best:

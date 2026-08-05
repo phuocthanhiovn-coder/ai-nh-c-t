@@ -245,7 +245,17 @@ def deliver_image(in_path, out_path, scene=None, opts=None):
     #    Dai sang RONG (nang gat/cua so chay) -> harsh_sun (Durand tone-map,
     #    giu mau giau, khong halo). Binh thuong -> adaptive nhe.
     highlights, shadows = _estimate_tone(img)
-    high_dr = highlights > 0.05 or shadows > 0.12
+    # ⭐ 04/08 (ra soat vong 7) — VE `shadows` LAM CONG LUON MO, nhanh else la MA CHET.
+    # Do tren ca 10 anh BENCH-10:
+    #   highlights: 0.0000 0.0043 0.0058 0.0260 0.0629 0.0636 0.0839 0.0887 0.0908 0.0922
+    #   shadows   : 0.2629 0.2640 0.2937 0.3000 (x7)   <- BAO HOA o 0.3000
+    # `shadows` cham tran 0.30 tren 8/10 anh va THAP NHAT cung la 0.2629, tuc dieu kien
+    # `shadows > 0.12` DUNG VOI MOI ANH. Hai ve noi bang `or` nen cong mo 10/10 va
+    # nhanh "tone nhe" (highlights_recover + shadows_lift) KHONG BAO GIO chay —
+    # harsh_sun (Durand tone-map, nang) chay ca tren anh noi that binh thuong.
+    # Mot dai luong da bao hoa thi khong the lam cong; bo no ra. `highlights` co phan
+    # bo that (0.0000-0.0922) nen nguong 0.05 tach duoc 6/10 vs 4/10.
+    high_dr = highlights > 0.05
     if high_dr:
         hs = float(np.clip(max(highlights / HL_MAX, shadows / SH_MAX), 0.4, 0.9))
         img = _run_op(img, "harsh_sun", {"strength": hs, "highlight_recover": 0.8,

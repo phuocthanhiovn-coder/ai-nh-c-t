@@ -54,10 +54,25 @@ def main():
     zip_path = os.path.join(args.out_dir, f"dataset_v{version}.zip")
     tmp_path = zip_path + ".tmp"
 
+    # ⭐ 04/08 (ra soat vong 7) — BAM NOI DUNG, khong chi bam TEN FILE.
+    # `compute_names_hash` chi bam danh sach TEN. Nen neu anh trong `before/`,`after/`
+    # bi thay doi (dung lai dataset, doi cach develop, sua cong can khop...) ma ten
+    # file giu nguyen thi hash VAN Y HET — box GPU nhan goi data CU va bao "khop
+    # manifest, dung ban moi" trong im lang. Ca mot luot train co the chay tren data
+    # cu ma khong ai biet.
+    # `build_train_set.py:72` da bam noi dung dung tu truoc; file nay thi chua (L16).
+    _h = hashlib.sha256()
+    for n in names:
+        _h.update(n.encode("utf-8"))
+        for _d in (before_dir, after_dir):
+            with open(os.path.join(_d, n), "rb") as _f:
+                for _blk in iter(lambda: _f.read(1 << 20), b""):
+                    _h.update(_blk)
     manifest = {
         "version": version,
         "pair_count": len(names),
-        "names_hash_sha256": compute_names_hash(names),
+        "names_hash_sha256": compute_names_hash(names),   # giu lai cho tuong thich cu
+        "content_hash_sha256": _h.hexdigest(),            # 04/08: hash THAT SU cua data
         "created": datetime.datetime.now().isoformat(timespec="seconds"),
     }
 
