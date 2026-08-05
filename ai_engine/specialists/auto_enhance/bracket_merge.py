@@ -176,15 +176,41 @@ def group_brackets(folder: str, group_size: int = 0) -> list:
             )
             group_size = 3
         else:
+            # ⭐ 04/08 (ra soat toan bo) — KHONG duoc gia dinh phoi sang LUON TANG.
+            # Ban cu cat chu ky moi moi khi exposures[i] <= exposures[i-1], tuc ngam
+            # gia dinh may LUON ghi bracket theo thu tu TANG DAN. Rat nhieu may ghi
+            # GIAM DAN (sang -> toi). Voi day giam dan thi MOI buoc deu bi coi la "chu
+            # ky moi" => moi tam thanh mot bracket rieng => `merge_exposures` nhan 1
+            # tam va tra thang tam do, tuc KHONG CON GOP BRACKET NUA. Anh giao ra mat
+            # sach dai sang cua so — dung trieu chung ma ca du an di chua mot thang.
+            # Nay xac dinh CHIEU tu buoc dau cua moi nhom, chi cat khi chieu DAO NGUOC.
             groups = []
             cur = [paths[0]]
+            chieu = 0                      # 0 = chua biet, +1 = tang, -1 = giam
             for i in range(1, len(paths)):
-                if exposures[i] > exposures[i - 1]:
-                    cur.append(paths[i])  # phơi sáng còn tăng -> cùng chu kỳ
+                d = exposures[i] - exposures[i - 1]
+                if d == 0:
+                    cur.append(paths[i])   # phoi sang trung nhau -> van cung chu ky
+                    continue
+                buoc = 1 if d > 0 else -1
+                if chieu == 0:
+                    chieu = buoc           # nhom nay di theo chieu nay
+                    cur.append(paths[i])
+                elif buoc == chieu:
+                    cur.append(paths[i])   # con di dung chieu -> cung chu ky
                 else:
-                    groups.append(cur)  # giảm -> chu kỳ mới
+                    groups.append(cur)     # dao chieu -> chu ky moi
                     cur = [paths[i]]
+                    chieu = 0
             groups.append(cur)
+            # ⚠️ CHUA XU LY: kieu ghi 0 / -2 / +2 (mot so may dat EV giua truoc). Day do
+            # co HAI lan dao chieu trong mot bracket nen se bi cat sai. Neu gap job kieu
+            # do thi truyen group_size tuong minh thay vi de =0.
+            _co = sorted({len(g) for g in groups})
+            if len(_co) > 1:
+                print(f"[bracket] CANH BAO: cac nhom co so tam KHONG DEU {_co} — co the "
+                      f"may ghi EV kieu 0/-2/+2 (hai lan dao chieu). Neu vay hay truyen "
+                      f"group_size tuong minh.", flush=True)
             return groups
 
     return [paths[i:i + group_size] for i in range(0, len(paths), group_size)]

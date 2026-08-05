@@ -199,6 +199,7 @@ def main():
             log(f"[{name}] STOP disk {free_gb():.0f}GB < 45"); break
 
         before0 = pairs_now()
+        _hong = False        # 04/08: co danh dau job that bai — xem khoi ghi so o duoi
         jobdir = os.path.join(STAGE, name)
         bdir = os.path.join(jobdir, "before")
         adir = os.path.join(jobdir, "after")
@@ -224,11 +225,25 @@ def main():
             import traceback
             log(f"[{name}] LOI: {e}")
             traceback.print_exc()
+            _hong = True
         finally:
             shutil.rmtree(jobdir, ignore_errors=True)
-        mark_done(name)
-        processed += 1
-        log(f"[{name}] xong. pairs: {before0} -> {pairs_now()}")
+        # ⭐ 04/08 (ra soat toan bo) — JOB NEM LOI VAN BI GHI "DA XONG".
+        # Ban cu goi `mark_done(name)` NGOAI khoi try/except, nen mot job that bai
+        # (tai ve hong, sai cau truc, ingest nem loi) van duoc danh dau DA XONG. Ma
+        # `jobdir` thi vua bi `finally` xoa sach. Ket qua: lan chay sau job do bi bo
+        # qua VINH VIEN — mat han, khong bao gio retry, va khong con RAW de lam lai.
+        # Chi ghi so khi job THAT SU ra them duoc anh.
+        _them = pairs_now() - before0
+        if _hong:
+            log(f"[{name}] THAT BAI -> KHONG ghi so da-xong, de lan sau chay lai.")
+        elif _them <= 0:
+            log(f"[{name}] chay xong nhung KHONG them cap nao ({before0} -> "
+                f"{pairs_now()}) -> KHONG ghi so da-xong, de lan sau chay lai.")
+        else:
+            mark_done(name)
+            processed += 1
+            log(f"[{name}] xong. pairs: {before0} -> {pairs_now()} (+{_them})")
 
     if not a.no_post:
         log("\n=== RESCUE ===");

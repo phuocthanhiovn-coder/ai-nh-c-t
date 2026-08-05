@@ -6,6 +6,10 @@ import argparse
 import requests
 import subprocess
 from ai_engine.data_pairing.ingest import run_ingest
+# 04/08: hai hang so nay duoc dung o buoc dem dau ra sau ingest (xem `_dem_dau_ra`).
+# Thieu dong import nay thi ham nem NameError — va `py_compile` KHONG bat duoc loi ten
+# chua dinh nghia, nen "bien dich OK" khong chung minh duoc gi. Da chay that de kiem.
+from ai_engine.data_pairing.config import PAIRS_COLOR_DIR, REVIEW_DIR
 
 JOBS_DONE_PATH = "data/jobs_done.txt"
 RAW_INCOMING_DIR = "data/raw_incoming"
@@ -235,12 +239,39 @@ def fetch_and_process_job(job_name, before_url, after_url, keep_raw=False, force
     
     # 5. Gọi pipeline Ingest SỬA 3
     print(f"[*] Đang thực thi Ingest cho Job: {job_name}...")
+
+    # ⭐ 04/08 (ra soat toan bo) — DEM SO DAU RA TRUOC/SAU. Khong duoc tin "khong nem loi".
+    # Ban cu chi bat Exception. Nhung `run_ingest` co the chay TROT LOT ma ra 0 CAP
+    # (khong khop duoc ten, sai cau truc thu muc, thieu anh after...). Khi do luong
+    # chay tiep xuong: xoa sach RAW (buoc 6), ghi so "da xong" (buoc 7), in "HOAN
+    # THANH XUAT SAC" — va vi job da nam trong so nen lan sau KHONG BAO GIO chay lai.
+    # Tuc anh RAW goc cua khach bi xoa VINH VIEN de doi lay ZERO cap du lieu, con bao
+    # cao thi noi la thanh cong. Day la loai mat mat khong phuc hoi duoc.
+    def _dem_dau_ra():
+        n = 0
+        for _d in (PAIRS_COLOR_DIR, REVIEW_DIR):
+            _b = os.path.join(_d, "before")
+            if os.path.isdir(_b):
+                n += sum(1 for _f in os.listdir(_b)
+                         if _f.lower().endswith((".jpg", ".jpeg", ".png", ".tif", ".tiff")))
+        return n
+
+    _truoc = _dem_dau_ra()
     try:
         run_ingest(reset=False, before_root=before_dest, after_root=after_dest, job_name=job_name)
     except Exception as e:
         print(f"[✗] Lỗi xảy ra khi chạy Ingest: {str(e)}. Giữ nguyên RAW để debug.")
         return False
-        
+
+    _them = _dem_dau_ra() - _truoc
+    if _them <= 0:
+        print(f"[✗] Ingest chạy xong nhưng KHÔNG tạo được ảnh đầu ra nào "
+              f"(trước {_truoc}, sau {_truoc + _them}). GIỮ NGUYÊN RAW và KHÔNG ghi sổ "
+              f"đã-xong — xoá RAW lúc này là mất ảnh gốc của khách vĩnh viễn để đổi "
+              f"lấy số 0. Kiểm lại cấu trúc thư mục / cách khớp tên rồi chạy lại.")
+        return False
+    print(f"[✓] Ingest tạo thêm {_them} ảnh đầu ra.")
+
     # 6. Purge RAW (Mặc định xóa raw incoming để giải phóng ổ)
     if not keep_raw:
         print(f"[*] Đang xóa thư mục RAW incoming: {job_dir} để giải phóng ổ đĩa...")

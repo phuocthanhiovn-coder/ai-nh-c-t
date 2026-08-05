@@ -100,20 +100,29 @@ _W_PERC = 0.05
 _W_LAB = 0.5
 
 
+# ⭐ 04/08 (ra soat toan bo) — LECH HOP DONG giua sweep.py va train_one.
+# Ban cu tra ve `loss` la mot CHUOI NHAN ("L1", "L1+Lab"...) va de cac trong so o CAP
+# TREN cua cfg. Nhung `train_sweep.train_one` lam `loss_cfg = dict(cfg.get("loss") or
+# {...})` — no doi `cfg["loss"]` la DICT trong so. `dict("L1+Lab")` nem ValueError
+# ngay, nen CA 16 CAU HINH deu chet o dong dau tien.
+# Truoc day loi do bi `except Exception: continue` nuot (da sua trong cung vong ra
+# soat nay), nen sweep van chay het roi in mot leaderboard RONG nhu ket qua that.
+# Nay tra ve dung dang train_one doi: cac trong so NAM TRONG dict `loss`.
+# Nhan doc duoc cho nguoi thi da nam o `name` ma `_cfg` truyen vao.
 def _L1():
-    return dict(loss="L1", w_l1=1.0, w_char=0.0, w_lab=0.0, w_perc=0.0)
+    return dict(loss=dict(w_l1=1.0, w_char=0.0, w_lab=0.0, w_perc=0.0))
 
 
 def _L1_LAB():
-    return dict(loss="L1+Lab", w_l1=1.0, w_char=0.0, w_lab=_W_LAB, w_perc=0.0)
+    return dict(loss=dict(w_l1=1.0, w_char=0.0, w_lab=_W_LAB, w_perc=0.0))
 
 
 def _L1_LAB_PERC():
-    return dict(loss="L1+Lab+Perc", w_l1=1.0, w_char=0.0, w_lab=_W_LAB, w_perc=_W_PERC)
+    return dict(loss=dict(w_l1=1.0, w_char=0.0, w_lab=_W_LAB, w_perc=_W_PERC))
 
 
 def _CHAR_LAB_PERC():
-    return dict(loss="Char+Lab+Perc", w_l1=0.0, w_char=1.0, w_lab=_W_LAB, w_perc=_W_PERC)
+    return dict(loss=dict(w_l1=0.0, w_char=1.0, w_lab=_W_LAB, w_perc=_W_PERC))
 
 
 def _cfg(name, lr, loss_fn, grid_bins, grid_size, proxy_res, width, **extra):
