@@ -169,10 +169,16 @@ def _do_hinh_hoc(a_gray, b_gray, vung, P):
     # (ngoac = bien an toan p50 so voi T_BIEN_DANG; script do:
     #  scratchpad/do_bien_dang.py, trich _de_so/_chon_vung bang ast tu chinh file
     #  nay nen khong the troi khoi ma that.)
-    # ⚠️ THANH THAT VE PHAN CHUA KIEM: bang tren chung minh ban nay BAT nhieu loan
-    # ngang `max`. Nua con lai — "giu duoc 3 tam toi tung bi loai oan" — MOI CHI
-    # suy ra tu chan doan (thu pham la vung response thap nhat, nay da bo di), CHUA
-    # do lai tren 53 bracket that. Phai chay lai truoc khi dung de dung dataset.
+    # ✅ DA KIEM TREN 53 BRACKET THAT (04/08 — 269 ARW develop full-res, ~80 phut):
+    #     do duoc 171/209 tam (khong tinh tam tham chieu)
+    #     cong CU  (max)          giu 170/171
+    #     cong MOI (bo vung yeu)  giu 171/171
+    #     tam duoc CUU them : 1  — FP104756.ARW, luma 17.3, bien dang 5.48 -> 0.39
+    #     tam bi LOT them   : 0  <-- tinh chat an toan then chot, KHONG co regression
+    # ⚠️ DINH CHINH: BAN_GIAO ghi cong cu loai OAN 3 tam. Do lai tren ca 53 bracket chi
+    # thay 1. Con so 3 KHONG tai lap duoc — dung trich dan lai no.
+    # (38/209 tam khong do duoc vi it hon MIN_VUNG vung tin cay; chung di theo duong
+    #  "cuu tam bi loai" rieng o cuoi ham, khong qua phep so nay.)
     # Cong BIEN DANG nay la lop chong anh ma them 25/07 sau khi chu chi 2 anh hong
     # (227A1947 ghost / 227A2152 vet tia) — KHONG duoc lam yeu de doi lay tam toi.
     vs.sort(key=lambda r: r[2])                  # response tang dan
