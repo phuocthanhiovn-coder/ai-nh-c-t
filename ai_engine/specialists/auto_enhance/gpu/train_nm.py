@@ -47,6 +47,16 @@ def train_nm(cfg: dict) -> dict:
     # "train tren anh 45x45" ghi o train_sweep.py:122) trong khi tap VAL van 1280px,
     # tuc train va val chay tren hai the gioi khac nhau va val loss thanh vo nghia.
     # Nay doc MOT LAN, dung 1280 (mac dinh cua train_sweep) cho ca hai.
+    # 04/08 (ra soat toan bo): cong khoa-la sang nay CHI ap cho train_sweep, khong ap
+    # cho nhanh nay (L16). Nay dung ham chung — CANH BAO chu khong nem, de khong lap
+    # lai viec chan chet 12 launcher nhu ban NEM sang nay da gay ra.
+    from .train_sweep import canh_bao_khoa_la
+    canh_bao_khoa_la(cfg, {
+        "amp", "base", "batch_size", "cache_cap", "cache_ram", "crop", "data_dir",
+        "device", "epochs", "gain_amp", "init_ckpt", "loss", "lr", "lut_dim",
+        "n_basis", "name", "num_workers", "out", "proxy_res", "run_name", "save_every",
+        "seed", "val_frac",
+    }, "train_nm")
     _cache_cap = int(cfg.get("cache_cap", 1280))
     train_ds = CropPairDataset(data_dir, train_files, crop, proxy_res, is_train=True,
                                cache_ram=bool(cfg.get("cache_ram", True)),

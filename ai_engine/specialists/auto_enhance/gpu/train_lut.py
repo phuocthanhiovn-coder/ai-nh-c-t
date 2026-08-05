@@ -47,7 +47,18 @@ def train_lut(cfg: dict) -> dict:
     use_amp = bool(cfg.get("amp", True)) and device.type == "cuda"
     num_workers = int(cfg.get("num_workers", 4))
     cache_ram = bool(cfg.get("cache_ram", True))
-    cache_cap = int(cfg.get("cache_cap", 60))
+    # ⭐ 04/08 (ra soat toan bo) — mac dinh 60 la DUNG cai loi "train tren anh 45x45".
+    # cache_cap la KICH THUOC PIXEL canh dai, khong phai so anh. Voi crop=512 thi 60
+    # nghia la moi anh bi thu ve 60px roi PHONG NGUOC len 512 de cat — nang luong chi
+    # tiet thap hon anh that ~450 lan, ma ca before lan after cung mo nhu nhau nen loss
+    # KHONG BAO GIO bao loi. Chinh train_sweep.py:129 co chan cung `cache_cap >= 2*crop`
+    # de chan dung viec nay, nhung train_lut khong di qua chan do (L16).
+    # Doi ve 1280 cho khop train_sweep.
+    cache_cap = int(cfg.get("cache_cap", 1280))
+    if cache_ram and cache_cap < 2 * crop:
+        raise ValueError(
+            f"cache_cap={cache_cap} < 2*crop={2 * crop}: crop se bi PHONG TU ANH MO "
+            f"(loi 30/07). Dat cache_cap >= {2 * crop} hoac cache_ram=False.")
     out_path = cfg.get("out", "checkpoints/sweep/CH_LUT.pt")
     loss_cfg = dict(cfg.get("loss") or {"w_l1": 1.0})
     lut_kwargs = dict(n_basis=int(cfg.get("n_basis", 3)),

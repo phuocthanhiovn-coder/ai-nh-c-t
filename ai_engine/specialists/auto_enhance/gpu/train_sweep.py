@@ -252,6 +252,26 @@ def _resolve_device(spec):
     return torch.device(spec)
 
 
+def canh_bao_khoa_la(cfg, khoa_hop_le, ten_trainer):
+    """04/08 — CANH BAO (khong nem) khi cfg co khoa khong ai doc.
+
+    Dung chung cho moi trainer de khoi phai chep logic sang tung nhanh (L16).
+
+    VI SAO CANH BAO chu khong NEM: sang nay toi them mot cong NEM cho train_one va no
+    lam CHET 12 launcher train — ke ca launch_chn.py, tuc cong thuc tai lap model dang
+    chay production — chi vi mot khoa cu ('save_every') khong nam trong danh sach.
+    Mot ban va chong-loi-im-lang ma tu no chan het viec thi te hon la loi no di chua.
+    Voi cac nhanh con lai: van phai NOI RA khoa la (de khong im lang chay sai lieu),
+    nhung khong duoc chan duong chay.
+    """
+    la = sorted(set(cfg) - set(khoa_hop_le))
+    if la:
+        print(f"[!] {ten_trainer}: cfg co khoa KHONG duoc doc {la} — chung se bi BO QUA. "
+              f"Neu day la khoa go sai thi thi nghiem dang chay KHAC y dinh cua ban.",
+              flush=True)
+    return la
+
+
 def _model_kwargs(cfg):
     return {k: cfg[k] for k in _MODEL_KEYS if k in cfg and cfg[k] is not None}
 

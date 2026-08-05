@@ -39,5 +39,11 @@ REVIEW_DIR = "data/review"
 # ket cau) o CO CO DINH 2048, roi anh xa sao cho 0.50 DUNG BANG ranh gioi dat/truot.
 # Nen giu nguyen 0.50 va tu day con so co nghia that; muon khat khe hon thi NANG len
 # (vd 0.75 ~ lech 1.5px@2048), muon rong hon thi HA xuong.
-# ⚠️ KHONG con phu thuoc do phan giai anh vao — do dung o dau cung ra cung mot so.
+# ⚠️ 04/08 (dinh chinh trong ngay) — KHANG DINH BAN DAU QUA MANH.
+# Cau cu ghi "KHONG con phu thuoc do phan giai — do o dau cung ra cung mot so". Dieu
+# do chi DUNG voi anh co canh dai >= 2048: ham dua ve thang do chi THU NHO, khong
+# phong to. Anh nho hon 2048 duoc do o chinh co that cua no, nen nguong 3.0px o day la
+# mot ti le LON hon so voi khung anh — tuc cong khat khe hon thuc su.
+# Moi cap before/after cua du an hien deu >= 2048 nen khong anh huong, nhung khong
+# duoc ghi mot khang dinh rong hon pham vi no dung.
 ALIGN_SCORE_THRESHOLD = 0.50  # 0.50 = lech dung 3.0px @2048; 1.00 = trung khit tuyet doi

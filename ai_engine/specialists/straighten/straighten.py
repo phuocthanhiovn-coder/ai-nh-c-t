@@ -275,6 +275,14 @@ def apply(img, params=None):
         res = cv2.warpPerspective(
             working.astype(np.float32, copy=False), np.asarray(h_override, np.float64),
             (w, h), flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
+        # ⭐ 04/08 (sua lai trong ngay) — BAN VA CLIP SANG NAY AP NHAM NHANH.
+        # Sang nay toi them `np.clip` cho duong `_warp_full` o cuoi ham nhung QUEN
+        # nhanh nay. Ma day moi la nhanh nuoi ANH GIAO HANG: brain/run.py goi
+        # `_st(out, {"strength":1.0, "h_override":_H})` de tai dung hinh hoc da tinh
+        # tren anh goc. Tuc bang chung "5/5 anh ra ngoai dai, toi +1.1119 / -0.0764"
+        # van dung y nguyen cho anh THAT SU di giao khach — ban va cu chi chua duong
+        # phu. Cung mot ham, hai duong ra: khuon mau L16 o pham vi MOT HAM.
+        np.clip(res, 0.0, 1.0, out=res)
         return (res, h_override) if return_h else res
 
     diag = analyze(working)
