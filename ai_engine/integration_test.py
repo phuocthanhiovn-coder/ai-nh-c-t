@@ -69,6 +69,7 @@ def main():
 
     all_ok = True
     qc_catches_washout = False
+    tham_hoa = []    # 04/08: cac luot bi QC gan co tham hoa tren ANH THAT (xem duoi)
     for img_path in picks:
         name = os.path.basename(img_path)
         in_u8 = cv2.imread(img_path, cv2.IMREAD_COLOR)
@@ -86,6 +87,20 @@ def main():
             all_ok = all_ok and size_ok
             qc_after = qc_score(out_u8.astype(np.float32) / 255.0)
             panel(in_u8, out_u8, os.path.join(OUT_DIR, f"compare_{tag}_{name}"))
+            # ⭐ 04/08 (san loi an) — DUA KET QUA QC CUA ANH THAT VAO DIEU KIEN PASS.
+            # Ban va sang nay moi sua duoc NUA: no bo tieu chi nguoc va them bai kiem
+            # do nhay bang anh bech co y. Nhung dong ket luan van chi dung `all_ok`
+            # (chi kiem KICH THUOC) va `qc_catches_washout` (tinh tu anh tong hop) —
+            # con ket qua QC cua ANH THAT thi bi VUT DI hoan toan.
+            # Tai lap duoc: tro config sang checkpoint co trong so NaN -> anh ra DEN
+            # 100%, QC bat dung (89.9 -> 51.0, needs_human=True) NHUNG bai kiem van in
+            # "PASS" va thoat 0. Tuc ca hai cong an toan cua du an deu xanh trong khi
+            # model dang pha huy moi tam anh.
+            if qc_after["needs_human"] or (qc_before["overall"] - qc_after["overall"]) > 20.0:
+                tham_hoa.append(
+                    f"{tag}/{name}: QC {qc_before['overall']:.1f}->{qc_after['overall']:.1f}"
+                    f" flags={qc_after['flags']} needs_human={qc_after['needs_human']}")
+
             # ⭐ 04/08 (ra soat vong 7) — TIEU CHI CU BI NGUOC.
             # Ban cu dat `qc_catches_washout = True` khi CHINH OUTPUT CUA MODEL bi QC
             # gan co washed_out, roi bat buoc co do phai True thi bai kiem moi PASS.
@@ -123,10 +138,17 @@ def main():
 
     print("-" * 66)
     print(f"  Khung xuong wiring : {'PASS - moi manh khop, chay end-to-end, size giu nguyen' if all_ok else 'FAIL'}")
+    if tham_hoa:
+        print(f"  QC tren ANH THAT   : FAIL - {len(tham_hoa)} luot bi QC gan co tham hoa:")
+        for d in tham_hoa:
+            print(f"      {d}")
+    else:
+        print("  QC tren ANH THAT   : PASS - khong luot nao bi QC gan co tham hoa")
     print(f"  QC bat anh bech    : {'PASS' if qc_catches_washout else 'FAIL - QC van bi lua!'}"
           f"  (anh tong hop biet truoc la bech: flags={qc_bech['flags']}, "
           f"needs_human={qc_bech['needs_human']}, overall={qc_bech['overall']:.1f})")
-    return all_ok and qc_catches_washout
+    # 04/08: `tham_hoa` (QC tren ANH THAT) nay la mot dieu kien PASS thuc su.
+    return all_ok and qc_catches_washout and not tham_hoa
 
 
 if __name__ == "__main__":

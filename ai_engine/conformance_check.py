@@ -24,6 +24,13 @@ SPECIALISTS = [
     ("ai_engine.specialists.shadow_light.light", "apply"),
     ("ai_engine.specialists.detail_restore.restore", "apply"),
     ("ai_engine.specialists.window_dehaze.dehaze", "apply"),
+    # ⭐ 04/08 (san loi an) — THEM CON QUAN TRONG NHAT, truoc day KHONG HE duoc kiem.
+    # `auto_enhance` la op chua MODEL — thu quyet dinh phan lon anh giao khach — nhung
+    # no khong nam trong danh sach nay tu dau du an. Tai lap duoc: tro config sang mot
+    # checkpoint co trong so NaN (model tra ve anh DEN 100%) roi chay conformance ->
+    # "13 PASS / 0 FAIL", exit 0. Tuc cong an toan bao he thong lanh manh trong khi
+    # model dang pha huy moi tam anh.
+    ("ai_engine.orchestrator.ops_basic", "auto_enhance"),
 ]
 
 

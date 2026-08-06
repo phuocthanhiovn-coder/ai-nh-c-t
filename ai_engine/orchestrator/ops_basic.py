@@ -111,6 +111,57 @@ _AUTO_ENHANCE_CONFIG = str(
 BO_QUA_LAN = 0
 
 
+class LoiCheckpointHong(RuntimeError):
+    """Model tra ve ket qua tham hoa (NaN/Inf, chay trang, chet den).
+
+    04/08: PHAI la lop rieng de phan biet voi loi inference nhat thoi (het RAM tren
+    mot anh cu the). Loi nhat thoi -> bo qua anh do, canh bao, chay tiep. Loi nay ->
+    DUNG MAY: no co nghia checkpoint hong hoac model phan ky, va moi anh con lai cua
+    lo cung se hong y het. Bo qua im lang o day la giao 500 anh chua chinh (hoac den
+    kit) kem nhat ky bao "Xong: 500 anh".
+    """
+
+
+def _hau_kiem(vao, ra):
+    """⭐ 04/08 (san loi an) — HAU KIEM ANH RA CUA MODEL. Loi CHAN da tai lap duoc.
+
+    Vi sao can: `torch.load` KHONG kiem CRC cua file zip, va truoc day khong noi nao
+    trong ai_engine kiem ket qua model co huu han / co suy bien hay khong. Tai lap that:
+      - lat 400 byte giua vung du lieu tensor cua CH_N.pt -> load_state_dict IM LANG ->
+        anh ra p50 = 255 (TRANG XOA), 85% diem >= 250
+      - dat mot tensor trong state_dict = NaN (kich ban that: du an da train 30+
+        checkpoint tren box thue, mot lan phan ky la ra file NaN) -> anh ra p50 = 0
+        (DEN TUYET DOI), vi np.clip(nan) van la nan roi .astype(uint8) thanh 0
+    Ca 4 duong giao hang (ops_basic, deliver, process, webapp) deu giao BINH THUONG,
+    process.py con in "Xong: N anh". 8 luot chay, KHONG mot dong bao loi.
+    Kich ban that: rclone keo checkpoint tu Drive/box GPU bi dut giua chung, hoac mot
+    dot train phan ky luu ra .pt co NaN roi duoc tro vao config. Ca lo 500 anh giao
+    khach ra trang xoa hoac den kit, nhat ky ghi "Xong: 500 anh".
+
+    Cong nay CHI bat tham hoa, khong phai cham chat luong: no doi hoi anh ra vua CHAY
+    (hoac CHET) tren dien rong, VUA te hon anh vao rat nhieu — de mot anh cua so sang
+    that hay mot phong toi that khong bi chan oan.
+    """
+    if not np.isfinite(ra).all():
+        raise LoiCheckpointHong(
+            "auto_enhance: model tra ve NaN/Inf. Gan nhu chac chan checkpoint hong "
+            "(tai ve dut giua chung) hoac mot dot train da phan ky. KHONG ghi anh ra — "
+            "de lang le thi ca lo se den kit ma nhat ky van bao thanh cong."
+        )
+    v = np.clip(np.asarray(vao, np.float32), 0.0, 1.0)
+    r = np.clip(np.asarray(ra, np.float32), 0.0, 1.0)
+    for ten, nguong, f in (("CHAY TRANG", 0.98, lambda x: (x >= 0.98).mean()),
+                           ("CHET DEN", 0.02, lambda x: (x <= 0.02).mean())):
+        tv, tr = float(f(v)), float(f(r))
+        if tr > 0.60 and tr - tv > 0.30:
+            raise LoiCheckpointHong(
+                f"auto_enhance: anh RA bi {ten} {tr*100:.1f}% dien tich (anh vao chi "
+                f"{tv*100:.1f}%). Day la dau hieu checkpoint hong hoac model phan ky. "
+                f"KHONG ghi anh ra."
+            )
+    return _clip01(r)
+
+
 def model_complete():
     """Model doi CH_N+ co TU LO sang-deu/mau/cua so hay khong.
 
@@ -251,15 +302,21 @@ def auto_enhance(img, params):
             proxy = HDRNetV2.make_proxy(t, proxy_res)
             with torch.no_grad():
                 out_t, _grid = _auto_enhance_model(proxy, t)
-            out = out_t.squeeze(0).clamp(0, 1).cpu().numpy().transpose(1, 2, 0)
-            return _clip01(out)
+            # KHONG clamp o day nua — de `_hau_kiem` con nhin thay NaN/Inf that su.
+            out = out_t.squeeze(0).cpu().numpy().transpose(1, 2, 0)
+            return _hau_kiem(img, out)
 
         from ai_engine.specialists.auto_enhance.infer import process_image
 
         img_u8 = (np.clip(img, 0.0, 1.0) * 255.0).astype(np.uint8)
         out_u8, _grid_shape = process_image(_auto_enhance_model, img_u8, _auto_enhance_device)
         out = out_u8.astype(np.float32) / 255.0
-        return _clip01(out)
+        return _hau_kiem(img, out)
+    except LoiCheckpointHong:
+        # 04/08: KHONG nuot loai loi nay. Checkpoint hong / model phan ky thi moi anh
+        # con lai cua lo cung hong y het — bo qua tung anh chi tao ra mot lo rac kem
+        # nhat ky bao thanh cong. Phai DUNG MAY de nguoi van hanh biet ma doi checkpoint.
+        raise
     except Exception as exc:
         # CANH BAO MOI LAN (khong tat op ca phien nua) + dem lai de ben goi biet.
         BO_QUA_LAN += 1
