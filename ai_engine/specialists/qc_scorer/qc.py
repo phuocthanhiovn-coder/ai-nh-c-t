@@ -157,7 +157,17 @@ def _detect_vertical_lines(gray_u8):
                                  minLineLength=min_len, maxLineGap=8)
         if hough is not None:
             for seg in hough:
-                x1, y1, x2, y2 = seg[0]
+                # ⭐ 04/08 (san loi an) — NHANH DU PHONG NAY SAP.
+                # `cv2.HoughLinesP` tra ve shape (N,1,4) o ban cu nhung (N,4) o ban
+                # dang cai, nen `seg[0]` lay ra mot SO nguyen roi giai nen 4 bien ->
+                # TypeError: cannot unpack non-iterable numpy.int32.
+                # Duong CHINH o dong 152 da xu ly dung ca hai dang bang
+                # `np.asarray(seg).reshape(-1)[:4]`, rieng nhanh du phong thi khong —
+                # dung khuon mau L16 trong pham vi MOT HAM.
+                # Vi sao an lau: nhanh nay CHI chay khi bo do duong thang chinh khong
+                # tim duoc gi. Anh chup that luon co duong thang nen khong bao gio vao;
+                # chi anh nhieu/anh phang moi kich hoat — va do la luc QC sap.
+                x1, y1, x2, y2 = np.asarray(seg).reshape(-1)[:4]
                 segments.append((float(x1), float(y1), float(x2), float(y2)))
 
     angles = []
@@ -273,6 +283,27 @@ def score(img):
     score(img_bgr_float01) -> dict. img: np.ndarray float32/float64 [0,1] HxWx3 BGR.
     """
     assert img.ndim == 3 and img.shape[2] == 3, "Anh phai la HxWx3 BGR"
+
+    # ⭐ 04/08 (san loi an) — VAN AN TOAN CHONG NaN. Do duoc: QC MU HOAN TOAN truoc NaN.
+    # Moi phep so sanh voi NaN deu tra False, nen ca chuoi cham diem sup do im lang:
+    #   (lum > 0.98).mean() va (lum < 0.02).mean() ve 0  -> khong phat chay/chim
+    #   np.median(lum) = NaN  -> ca hai nhanh med<LO va med>HI deu False -> med_dev 0
+    #                         -> exposure_score = 100
+    #   np.percentile = NaN   -> dyn_range < 0.55 la False -> washout_score = 100
+    #   np.clip(nan*255,0,255).astype(uint8) = 0 -> noise/color_cast cung an diem cao
+    # Ket qua do that: anh 100% NaN duoc cham 75/100, needs_human=False — CAO HON ca
+    # anh ngau nhien SACH (80.37 nhung needs_human=True). Roi anh do duoc ghi ra JPEG
+    # DEN TUYET DOI ma khong mot loi bao nao.
+    if not np.isfinite(img).all():
+        n_hong = int((~np.isfinite(img)).sum())
+        return {
+            "overall": 0.0,
+            "flags": ["nan_pixels"],
+            "needs_human": True,
+            "debug": {"so_diem_khong_huu_han": n_hong,
+                      "ghi_chu": "anh chua NaN/Inf — moi phep so sanh voi NaN deu tra "
+                                 "False nen cham diem se ra so DEP mot cach gia tao"},
+        }
 
     small_u8 = _to_small_u8(img)
 

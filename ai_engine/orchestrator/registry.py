@@ -8,6 +8,8 @@ Schema param ho tro 3 kieu:
   - enum : {"type":"enum","choices":[..],"default":..}
   - bool : {"type":"bool","default":..}
 """
+import math      # 04/08: dung cho math.isfinite trong clamp_params (chan NaN/Inf).
+
 from . import ops_basic
 
 # --- Cac specialist THAT (moi con 1 thu muc, da qua conformance_check) ---
@@ -190,6 +192,24 @@ def clamp_params(op_name, params):
             try:
                 val = float(val)
             except (TypeError, ValueError):
+                val = pschema["default"]
+            # ⭐ 04/08 (san loi an) — NaN/Inf PHAI ve MAC DINH, khong duoc thanh MAX.
+            # `float('nan')` KHONG nem loi (khac 'abc'), nen no di thang xuong dong
+            # clamp. Ma trong Python `min(pmax, nan)` so sanh `nan < pmax` = False nen
+            # tra ve pmax, roi `max(pmin, pmax)` = pmax => NaN BIEN THANH GIA TRI LON
+            # NHAT cua dai, tuc huong NGUY HIEM NHAT.
+            # Do that: brightness.amount nan -> 1.0 (mac dinh 0.0) · sharpen nan -> 0.5
+            # · window_pull nan -> strength 1.0 + saturation_boost 0.6 (deu max)
+            # · 'inf' -> 1.0 · '1e400' -> 1.0 · '-inf' -> -1.0 · 'abc' -> 0.0 (dung).
+            # Nguy hiem nhat voi op co mac dinh = 0 (mac dinh la TAT): NaN bien
+            # "tat op" thanh "chay het co".
+            # Duong vao rat that: `json.loads` cua Python MAC DINH chap nhan literal
+            # NaN/Infinity, va `planner._validate_plan` goi thang clamp_params tren
+            # JSON do LLM tra ve.
+            if not math.isfinite(val):
+                print(f"[!] clamp_params: op '{op_name}' tham so '{pname}' nhan gia tri "
+                      f"khong huu han ({val!r}) -> dung MAC DINH {pschema['default']}. "
+                      f"Neu day la plan do LLM sinh thi plan do dang hong.", flush=True)
                 val = pschema["default"]
             val = max(pschema["min"], min(pschema["max"], val))
         elif ptype == "enum":

@@ -104,9 +104,20 @@ def do_ba_truc(pred, target, src, canh_pct=70):
     # docstring dau file noi thuoc CU mac phai (-0.9% cho anh den trang) — thuoc moi
     # MAC LAI theo mot duong khac.
     # Nay: pred nhat mau hon target thi tru thang theo ti le bao hoa con thieu.
-    c_pred, c_tg = _chroma_tb(pred), _chroma_tb(target)
-    if c_tg > 1e-6 and c_pred < c_tg:
-        mau -= 100.0 * (1.0 - c_pred / c_tg)
+    # ⭐ 04/08 (san loi an) — SUA LAI CHINH BAN VA HOM QUA: no PHA NEO 0.0.
+    # Ban cu tru diem bat cu khi nao `c_pred < c_tg`. Nhung khi pred = src (ca neo
+    # "khong lam gi") ma ANH GOC von da nhat mau hon anh dich, thi dong nay VAN tru ->
+    # ket qua AM, trong khi docstring dau file hua "0 = nhu anh goc" va `tu_kiem` kiem
+    # dung dieu do bang `abs(m) < 0.01`.
+    # Do tren DU LIEU THAT (khong phai anh tong hop): BENCH-10 sai neo 2/10 canh
+    # (hr_fp104555 cham -30.98%, hr_fp104790 -0.39%); data/pairs_real_fullres sai neo
+    # 4/20 cap, xau nhat -29.87%. Tuc mot model KHONG LAM GI bi cham -31 diem mau.
+    # Sua: lay MOC la min(chroma anh goc, chroma anh dich). Nhu vay "pred = src" tro
+    # lai dung 0.0, ma "den trang" (c_pred = 0) van bi phat nang nhu y do ban dau.
+    c_pred, c_tg, c_src = _chroma_tb(pred), _chroma_tb(target), _chroma_tb(src)
+    _moc = min(c_src, c_tg)
+    if c_tg > 1e-6 and c_pred < _moc:
+        mau -= 100.0 * (_moc - c_pred) / c_tg
 
     ct = _canh(target)
     m = ct > np.percentile(ct, canh_pct)

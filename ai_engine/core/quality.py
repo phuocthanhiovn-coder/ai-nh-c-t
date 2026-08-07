@@ -194,6 +194,16 @@ def write_image(path, img, quality=95):
     """Ghi JPEG (q=quality, 8-bit) hoac PNG (16-bit) theo duoi file. Assert khong doi size."""
     path = str(path)
     img = np.asarray(img, dtype=np.float32)
+    # ⭐ 04/08 (san loi an) — TU CHOI GHI anh chua NaN/Inf.
+    # `np.clip(nan, 0, 255).astype(np.uint8)` cho ra 0, tuc NaN am tham bien thanh
+    # DEN TUYET DOI va duoc ghi ra JPEG nhu mot tam anh binh thuong. Da tai lap: model
+    # voi trong so NaN -> ca 4 duong giao hang xuat file den 100%, khong mot loi bao.
+    # Day la buoc CUOI CUNG truoc khi anh den tay khach — phai chan o day.
+    if not np.isfinite(img).all():
+        raise ValueError(
+            f"Tu choi ghi {path}: anh chua {int((~np.isfinite(img)).sum())} diem "
+            f"NaN/Inf. Neu ghi thi chung se am tham thanh mau DEN trong file JPEG."
+        )
     h, w = img.shape[:2]
     ext = os.path.splitext(path)[1].lower()
 
